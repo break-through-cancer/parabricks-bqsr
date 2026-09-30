@@ -3,7 +3,7 @@ workflow SAMPLESHEET_TO_SAMPLES {
     samplesheet // path to samplesheet CSV (sample,alignment,alignment_index,recal_table)
 
     main:
-    rows = Channel.fromPath(resolveRelativeToProjectDir(samplesheet), checkIfExists: true)
+    rows = Channel.fromPath(samplesheet, checkIfExists: true)
         .splitCsv(header: true)
         .map { row -> validateSamplesheetRow(row) }
 

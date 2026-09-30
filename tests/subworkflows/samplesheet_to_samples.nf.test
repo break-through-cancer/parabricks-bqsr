@@ -7,7 +7,7 @@ nextflow_workflow {
         when {
             workflow {
                 """
-                input[0] = "tests/fixtures/samplesheet_to_samples/valid.csv"
+                input[0] = "\${projectDir}/tests/fixtures/samplesheet_to_samples/valid.csv"
                 """
             }
         }
@@ -27,7 +27,7 @@ nextflow_workflow {
         when {
             workflow {
                 """
-                input[0] = "tests/fixtures/samplesheet_to_samples/missing_recal_table.csv"
+                input[0] = "\${projectDir}/tests/fixtures/samplesheet_to_samples/missing_recal_table.csv"
                 """
             }
         }
@@ -41,7 +41,7 @@ nextflow_workflow {
         when {
             workflow {
                 """
-                input[0] = "tests/fixtures/samplesheet_to_samples/nonexistent_path.csv"
+                input[0] = "\${projectDir}/tests/fixtures/samplesheet_to_samples/nonexistent_path.csv"
                 """
             }
         }
@@ -55,7 +55,7 @@ nextflow_workflow {
         when {
             workflow {
                 """
-                input[0] = "tests/fixtures/samplesheet_to_samples/duplicate_sample.csv"
+                input[0] = "\${projectDir}/tests/fixtures/samplesheet_to_samples/duplicate_sample.csv"
                 """
             }
         }
@@ -69,7 +69,7 @@ nextflow_workflow {
         when {
             workflow {
                 """
-                input[0] = "tests/fixtures/samplesheet_to_samples/header_only.csv"
+                input[0] = "\${projectDir}/tests/fixtures/samplesheet_to_samples/header_only.csv"
                 """
             }
         }

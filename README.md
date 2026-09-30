@@ -35,8 +35,19 @@ CSV, one row per sample. See `assets/samplesheet.csv`.
 | `alignment_index` | Its `.bai` / `.crai`. |
 | `recal_table` | The BQSR recalibration table `sarek_align` publishes for that sample. |
 
-Relative paths resolve against the pipeline directory (`projectDir`). Absolute paths,
-local or `s3://`, are recommended for real runs.
+`--input` itself may be local or `s3://`; a relative `--input` resolves against the launch
+directory. Paths inside the samplesheet may be `s3://` (or any URI Nextflow supports)
+and are checked for existence at startup. Use absolute or `s3://` paths inside the
+samplesheet for AWS Batch runs: relative row paths resolve against the pipeline
+directory (`projectDir`) on the head node, which suits the committed test fixtures only.
+
+### GPU
+
+`PARABRICKS_APPLYBQSR` requests one GPU (`accelerator = 1` in `conf/modules.config`).
+On AWS Batch this places the task on a GPU compute environment and passes
+`--num-gpus 1` to `pbrun`. With the local executor and Docker, `--gpus all` is added to
+the container options. `applybqsr` uses at most two GPUs; raise `accelerator` to `2` to
+trade cost for speed.
 
 ### Parameters
 
@@ -82,7 +93,8 @@ synthetic files, not patient data.
    manual `sarek_align` run on a branch carrying commit `47a75115`.
 2. **No real Parabricks execution has been validated.** The dev machine has no NVIDIA
    GPU, so `PARABRICKS_APPLYBQSR` is tested only through `-stub`. Real validation must
-   happen on Cirro against a GPU instance. Items to confirm there: `stageInMode 'copy'`
+   happen on Cirro against a GPU instance. Items to confirm there: the `accelerator`
+   request co-existing with Cirro's own GPU compute config, `stageInMode 'copy'`
    (inherited from the nf-core Parabricks modules; `--preserve-file-symlinks` may remove
    the copy) and CPU/memory sizing.
 3. **GATK parity (`SPEC.md` §4.5) is not yet checked.** This check requires a real pre-BQSR
