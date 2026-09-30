@@ -1,0 +1,55 @@
+nextflow_process {
+    name "Test PARABRICKS_APPLYBQSR (stub)"
+    script "modules/local/parabricks_applybqsr.nf"
+    process "PARABRICKS_APPLYBQSR"
+    options "-stub"
+    config "tests/local/parabricks_applybqsr.nf.config"
+
+    test("emits one recalibrated BAM per sample via the stub block -- no NVIDIA GPU on the dev machine, so real pbrun execution is never attempted here") {
+        when {
+            process {
+                """
+                input[0] = [
+                    [ sample: 'TEST_SAMPLE' ],
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram"),
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram.crai"),
+                    file("\${projectDir}/tests/fixtures/modules/placeholder.recal.table")
+                ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out[0].size() == 1
+            assert process.out[0][0][0] == [ sample: 'TEST_SAMPLE' ]
+            assert file(process.out[0][0][1]).name == 'TEST_SAMPLE.recal.bam'
+        }
+    }
+
+    test("an input BAM already named <sample>.recal.bam does not collide with the output") {
+        when {
+            process {
+                """
+                input[0] = [
+                    [ sample: 'collide' ],
+                    file("\${projectDir}/tests/fixtures/modules/collide.recal.bam"),
+                    file("\${projectDir}/tests/fixtures/modules/collide.recal.bam.bai"),
+                    file("\${projectDir}/tests/fixtures/modules/placeholder.recal.table")
+                ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert file(process.out[0][0][1]).name == 'collide.recal.bam'
+        }
+    }
+}

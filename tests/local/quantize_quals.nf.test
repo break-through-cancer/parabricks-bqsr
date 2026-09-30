@@ -1,0 +1,106 @@
+nextflow_process {
+    name "Test QUANTIZE_QUALS"
+    script "modules/local/quantize_quals.nf"
+    process "QUANTIZE_QUALS"
+
+    // Content checks shell out to the host's samtools to decode the container's output.
+    def samtoolsView = { String path, String ref ->
+        def proc = ['samtools', 'view', '-T', ref, path].execute()
+        def out = proc.text
+        proc.waitFor()
+        assert proc.exitValue() == 0
+        out
+    }
+
+    test("default params: BAM output is quantized nearest-in-probability-space and indexed") {
+        when {
+            process {
+                """
+                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'bam'
+                """
+            }
+        }
+        then {
+            assert process.success
+            def (meta, bam, idx) = process.out[0][0]
+            assert meta == [ sample: 'TEST_SAMPLE' ]
+            assert file(bam).name == 'TEST_SAMPLE.recal.bam'
+            assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
+            assert samtoolsView(bam, "${projectDir}/tests/fixtures/modules/reference.fasta") ==
+                file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_nearest.body.sam").text
+        }
+    }
+
+    test("round_down_quantized with CRAM output: reads CRAM input, writes indexed CRAM") {
+        when {
+            params {
+                round_down_quantized = true
+            }
+            process {
+                """
+                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.cram") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'cram'
+                """
+            }
+        }
+        then {
+            assert process.success
+            def (meta, cram, idx) = process.out[0][0]
+            assert file(cram).name == 'TEST_SAMPLE.recal.cram'
+            assert file(idx).name == 'TEST_SAMPLE.recal.cram.crai'
+            def core = { String sam -> sam.readLines().collect { it.tokenize('\t').take(11).join('\t') }.sort() }
+            assert core(samtoolsView(cram, "${projectDir}/tests/fixtures/modules/reference.fasta")) ==
+                core(file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_round_down.body.sam").text)
+        }
+    }
+
+    test("an input named <sample>.recal.bam does not collide with the output name") {
+        when {
+            process {
+                """
+                input[0] = [ [ sample: 'collide' ], file("\${projectDir}/tests/fixtures/modules/collide.recal.bam") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'bam'
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert file(process.out[0][0][1]).name == 'collide.recal.bam'
+        }
+    }
+
+    test("a preserve threshold not below the smallest bin fails the task with the tool's message") {
+        when {
+            params {
+                preserve_qscores_less_than = 10
+            }
+            process {
+                """
+                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'bam'
+                """
+            }
+        }
+        then {
+            assert process.failed
+            assert (process.stdout + process.stderr).join('\n').contains('strictly below')
+        }
+    }
+}

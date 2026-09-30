@@ -1,0 +1,49 @@
+nextflow_process {
+    name "Test SAMTOOLS_FINALIZE"
+    script "modules/local/samtools_finalize.nf"
+    process "SAMTOOLS_FINALIZE"
+
+    test("bam: indexes the BAM under <sample>.recal.bam without re-encoding it") {
+        when {
+            process {
+                """
+                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'bam'
+                """
+            }
+        }
+        then {
+            assert process.success
+            def (meta, bam, idx) = process.out[0][0]
+            assert file(bam).name == 'TEST_SAMPLE.recal.bam'
+            assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
+            assert file(bam).bytes == file("${projectDir}/tests/fixtures/modules/sample.bam").bytes
+        }
+    }
+
+    test("cram: converts to an indexed CRAM") {
+        when {
+            process {
+                """
+                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                input[2] = 'cram'
+                """
+            }
+        }
+        then {
+            assert process.success
+            def (meta, cram, idx) = process.out[0][0]
+            assert file(cram).name == 'TEST_SAMPLE.recal.cram'
+            assert file(idx).name == 'TEST_SAMPLE.recal.cram.crai'
+            assert file(cram).bytes[0..3] == 'CRAM'.bytes as List
+        }
+    }
+}
