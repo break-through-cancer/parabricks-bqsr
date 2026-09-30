@@ -21,6 +21,13 @@ including unmapped reads — still get recalibrated quality scores. Parabricks' 
 `fq2bam`-integrated application path is interval-scoped, so it cannot be reused for this
 step; a separate `pbrun applybqsr` pass is required.
 
+**External dependency, unresolved as of this writing (2026-09-30, re-checked via `gh pr
+view 115 --repo CirroBio/Cirro-pipelines`): PR #115 is still open/draft, not merged.**
+Real end-to-end testing of this pipeline against an actual `sarek_align` output is
+blocked until it merges — until then, a `recal_table` samplesheet input can only come
+from a manually-run `sarek_align` on a branch carrying that commit, or a hand-constructed
+fixture. Code development and unit-level testing don't need to wait on it.
+
 Additionally, NVIDIA Parabricks currently has no equivalent of GATK `ApplyBQSR`'s
 `--static-quantized-quals` (or its dynamic `--quantize-quals`) — GATK's own quality-score
 quantization step doesn't exist in Parabricks at all. Replicating it requires a
