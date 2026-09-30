@@ -5,15 +5,13 @@ nextflow_pipeline {
     options "-stub"
     config "tests/local/parabricks_applybqsr.nf.config"
 
-    test("quantization enabled: every sample goes APPLYBQSR -> QUANTIZE_QUALS and is published as indexed CRAM") {
+    test("quantization enabled (default): every sample goes APPLYBQSR -> QUANTIZE_QUALS and is published as indexed CRAM") {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
-                outdir                 = "${outputDir}/results"
-                quantize_quals_enabled = true
-                output_fmt             = 'cram'
+                outdir        = "${outputDir}/results"
             }
         }
         then {
@@ -30,14 +28,15 @@ nextflow_pipeline {
         }
     }
 
-    test("quantization disabled (default): every sample goes APPLYBQSR -> SAMTOOLS_FINALIZE and is published as indexed BAM") {
+    test("quantization disabled: every sample goes APPLYBQSR -> SAMTOOLS_FINALIZE and is published as indexed BAM") {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
-                outdir     = "${outputDir}/results"
-                output_fmt = 'bam'
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = false
+                output_fmt             = 'bam'
             }
         }
         then {

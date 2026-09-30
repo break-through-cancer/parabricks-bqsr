@@ -18,7 +18,7 @@ samplesheet ─▶ SAMPLESHEET_TO_SAMPLES ─▶ PARABRICKS_APPLYBQSR (no interv
 
 ```bash
 nextflow run main.nf --input samplesheet.csv
-nextflow run main.nf --input samplesheet.csv --quantize_quals_enabled true --output_fmt cram
+nextflow run main.nf --input samplesheet.csv --quantize_quals_enabled false --output_fmt bam
 ```
 
 `--input` is the only required parameter. Invalid parameter values, missing samplesheet
@@ -56,7 +56,7 @@ trade cost for speed.
 | `--outdir` | `./results` | Output directory. |
 | `--ref_fasta` / `--ref_fasta_fai` | hg38 from `s3://broad-references` | Reference used for alignment. |
 | `--output_fmt` | `cram` | `bam` or `cram`; independent of input format. |
-| `--quantize_quals_enabled` | `false` | Run `QUANTIZE_QUALS` after `applybqsr`. |
+| `--quantize_quals_enabled` | `true` | Run `QUANTIZE_QUALS` after `applybqsr`; `false` publishes the unquantized recalibrated output instead. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
