@@ -1,0 +1,81 @@
+nextflow_workflow {
+    name "Test SAMPLESHEET_TO_SAMPLES"
+    script "subworkflows/local/samplesheet_to_samples/main.nf"
+    workflow "SAMPLESHEET_TO_SAMPLES"
+
+    test("a valid samplesheet emits one tuple per row, BAM and CRAM rows alike") {
+        when {
+            workflow {
+                """
+                input[0] = "tests/fixtures/samplesheet_to_samples/valid.csv"
+                """
+            }
+        }
+        then {
+            assert workflow.success
+            assert workflow.out.samples.size() == 2
+            def by_sample = workflow.out.samples.collectEntries { [ (it[0].sample): it ] }
+            assert by_sample.keySet() == ['SAMPLE_A', 'SAMPLE_B'] as Set
+            assert by_sample.SAMPLE_A[1].toString().endsWith('sample_a.cram')
+            assert by_sample.SAMPLE_A[2].toString().endsWith('sample_a.cram.crai')
+            assert by_sample.SAMPLE_A[3].toString().endsWith('sample_a.table')
+            assert by_sample.SAMPLE_B[1].toString().endsWith('sample_b.bam')
+        }
+    }
+
+    test("a row with an empty recal_table is a hard error naming the sample") {
+        when {
+            workflow {
+                """
+                input[0] = "tests/fixtures/samplesheet_to_samples/missing_recal_table.csv"
+                """
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join("\n").contains("Samplesheet row 'SAMPLE_A' missing 'recal_table'")
+        }
+    }
+
+    test("a path that does not exist is a hard error naming the path") {
+        when {
+            workflow {
+                """
+                input[0] = "tests/fixtures/samplesheet_to_samples/nonexistent_path.csv"
+                """
+            }
+        }
+        then {
+            assert !workflow.success
+            assert (workflow.stdout + workflow.stderr).join("\n").contains("does_not_exist.cram")
+        }
+    }
+
+    test("a duplicate sample ID is a hard error") {
+        when {
+            workflow {
+                """
+                input[0] = "tests/fixtures/samplesheet_to_samples/duplicate_sample.csv"
+                """
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join("\n").contains("Duplicate sample ID(s) in samplesheet: SAMPLE_A")
+        }
+    }
+
+    test("a header-only samplesheet is a hard error") {
+        when {
+            workflow {
+                """
+                input[0] = "tests/fixtures/samplesheet_to_samples/header_only.csv"
+                """
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join("\n").contains("Samplesheet produced zero samples")
+        }
+    }
+}

@@ -1,1 +1,11 @@
+# Nextflow runtime
+.nextflow*
+work/
+results/
+.nf-test*
+
+# quantize_quals build artifacts
+tools/quantize_quals/build/
+
+# macOS
 .DS_Store

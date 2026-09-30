@@ -1,0 +1,2 @@
+sample,alignment,alignment_index,recal_table
+SAMPLE_A,/path/to/SAMPLE_A.recal.cram,/path/to/SAMPLE_A.recal.cram.crai,/path/to/SAMPLE_A.recal.table

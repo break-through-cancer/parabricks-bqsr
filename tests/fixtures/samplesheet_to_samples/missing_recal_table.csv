@@ -1,0 +1,2 @@
+sample,alignment,alignment_index,recal_table
+SAMPLE_A,tests/fixtures/samplesheet_to_samples/sample_a.cram,tests/fixtures/samplesheet_to_samples/sample_a.cram.crai,
