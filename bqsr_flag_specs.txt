@@ -1,0 +1,221 @@
+Implement a BAM/CRAM post-processing tool that reproduces GATK ApplyBQSR's
+static quality-score quantization on the output of NVIDIA Parabricks
+ApplyBQSR.
+
+The tool should ONLY modify the per-base QUAL values. It should not perform
+BQSR again or otherwise modify alignments, sequences, tags, coordinates,
+read groups, CIGARs, etc.
+
+Implement these three GATK-compatible options:
+
+1. --static-quantized-quals <Q...>
+
+   Accept one or more integer Phred quality bins.
+
+   Example:
+
+       --static-quantized-quals 10 20 30
+
+   This defines the target static quality-score bins.
+
+   GATK treats the preservation threshold as the lower boundary and the
+   supplied static qualities as subsequent boundaries.
+
+   With the defaults:
+
+       --preserve-qscores-less-than 6
+       --static-quantized-quals 10 20 30
+
+   qualities >= 6 are quantized using boundaries:
+
+       6, 10, 20, 30
+
+
+2. --preserve-qscores-less-than <Q>
+
+   Default:
+
+       --preserve-qscores-less-than 6
+
+   QUAL values strictly less than this threshold must remain unchanged.
+
+   Therefore, with the default:
+
+       Q0 -> Q0
+       Q1 -> Q1
+       Q2 -> Q2
+       Q3 -> Q3
+       Q4 -> Q4
+       Q5 -> Q5
+
+   Do not quantize these values.
+
+   Note: because this tool operates AFTER Parabricks ApplyBQSR, this
+   reproduces GATK behavior most reliably with the standard/default
+   threshold of 6. Arbitrary preservation thresholds cannot necessarily
+   reproduce pre-BQSR GATK semantics unless original qualities are known.
+
+
+3. --round-down-quantized
+
+   Boolean flag; default false.
+
+   This option only modifies static quantization.
+
+   If FALSE:
+
+       Assign each quality to the nearest static boundary in
+       probability space.
+
+       Convert Phred Q to probability of a correct call:
+
+           Pcorrect(Q) = 1 - 10^(-Q / 10)
+
+       For a quality between two adjacent boundaries, choose whichever
+       boundary has the closest Pcorrect value.
+
+       For:
+
+           --preserve-qscores-less-than 6
+           --static-quantized-quals 10 20 30
+
+       the resulting mapping is:
+
+           0-5   -> unchanged
+           6-7   -> 6
+           8-12  -> 10
+           13-22 -> 20
+           >=23  -> 30
+
+   If TRUE:
+
+       Round each quality DOWN to the largest static boundary that is
+       <= the current quality.
+
+       Using boundaries:
+
+           6, 10, 20, 30
+
+       gives:
+
+           0-5   -> unchanged
+           6-9   -> 6
+           10-19 -> 10
+           20-29 -> 20
+           >=30  -> 30
+
+
+IMPLEMENTATION
+
+Build a lookup table once at program startup rather than performing
+floating-point calculations for every base.
+
+Conceptually:
+
+    mapping[0..MAX_QUAL]
+
+For q < preserve_threshold:
+
+    mapping[q] = q
+
+Otherwise:
+
+    boundaries =
+        [preserve_threshold] +
+        sorted(static_quantized_quals)
+
+If --round-down-quantized:
+
+    mapping[q] =
+        largest boundary <= q
+
+Otherwise:
+
+    mapping[q] =
+        boundary minimizing:
+
+        abs(
+            (1 - 10^(-q/10))
+            -
+            (1 - 10^(-boundary/10))
+        )
+
+For values greater than the largest static bin, map to the largest bin.
+
+
+BAM PROCESSING
+
+For every alignment record:
+
+    quals = record QUAL array
+
+    for each base quality q:
+
+        q = mapping[q]
+
+    replace the QUAL array
+
+Do not modify any other portion of the alignment record.
+
+Preserve:
+
+    QNAME
+    FLAG
+    RNAME
+    POS
+    MAPQ
+    CIGAR
+    RNEXT
+    PNEXT
+    TLEN
+    SEQ
+    all auxiliary tags
+
+The output should remain coordinate sorted if the input is coordinate
+sorted.
+
+
+PERFORMANCE
+
+Use HTSlib or an equivalent high-performance BAM library.
+
+Use multithreaded BGZF decompression/compression where possible. The
+quality transformation itself is a trivial lookup operation:
+
+    new_q = mapping[old_q]
+
+The workload should therefore primarily be limited by BAM
+decompression, compression, and storage throughput.
+
+No GPU acceleration should be necessary.
+
+
+VALIDATION
+
+Validate against GATK using the SAME original pre-BQSR BAM and
+recalibration table.
+
+Reference path:
+
+    GATK ApplyBQSR
+        --static-quantized-quals 10
+        --static-quantized-quals 20
+        --static-quantized-quals 30
+        --preserve-qscores-less-than 6
+
+Test path:
+
+    Parabricks ApplyBQSR
+        ->
+    custom static quantizer
+        --static-quantized-quals 10 20 30
+        --preserve-qscores-less-than 6
+
+Compare decompressed alignment records, particularly:
+
+    QNAME
+    SEQ
+    QUAL
+
+The postprocessor should only introduce the expected QUAL quantization
+differences relative to the unquantized Parabricks BAM.
