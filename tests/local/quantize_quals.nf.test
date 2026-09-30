@@ -3,15 +3,6 @@ nextflow_process {
     script "modules/local/quantize_quals.nf"
     process "QUANTIZE_QUALS"
 
-    // Content checks shell out to the host's samtools to decode the container's output.
-    def samtoolsView = { String path, String ref ->
-        def proc = ['samtools', 'view', '-T', ref, path].execute()
-        def out = proc.text
-        proc.waitFor()
-        assert proc.exitValue() == 0
-        out
-    }
-
     test("default params: BAM output is quantized nearest-in-probability-space and indexed") {
         when {
             process {
@@ -27,12 +18,13 @@ nextflow_process {
         }
         then {
             assert process.success
-            def (meta, bam, idx) = process.out[0][0]
+            def (meta, bam_out, idx) = process.out[0][0]
             assert meta == [ sample: 'TEST_SAMPLE' ]
-            assert file(bam).name == 'TEST_SAMPLE.recal.bam'
+            assert file(bam_out).name == 'TEST_SAMPLE.recal.bam'
             assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
-            assert samtoolsView(bam, "${projectDir}/tests/fixtures/modules/reference.fasta") ==
-                file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_nearest.body.sam").text
+            assert bam(bam_out).getSamLines()*.trim() ==
+                file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_nearest.body.sam").readLines()
+            assert bam(bam_out).getHeader().any { it.startsWith("@PG\tID:quantize_quals") }
         }
     }
 
@@ -54,12 +46,12 @@ nextflow_process {
         }
         then {
             assert process.success
-            def (meta, cram, idx) = process.out[0][0]
-            assert file(cram).name == 'TEST_SAMPLE.recal.cram'
+            def (meta, cram_out, idx) = process.out[0][0]
+            assert file(cram_out).name == 'TEST_SAMPLE.recal.cram'
             assert file(idx).name == 'TEST_SAMPLE.recal.cram.crai'
-            def core = { String sam -> sam.readLines().collect { it.tokenize('\t').take(11).join('\t') }.sort() }
-            assert core(samtoolsView(cram, "${projectDir}/tests/fixtures/modules/reference.fasta")) ==
-                core(file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_round_down.body.sam").text)
+            def core = { List lines -> lines.collect { it.trim().tokenize('\t').take(11).join('\t') }.sort() }
+            assert core(cram(cram_out, "${projectDir}/tests/fixtures/modules/reference.fasta").getSamLines()) ==
+                core(file("${projectDir}/tools/quantize_quals/tests/fixtures/expected_round_down.body.sam").readLines())
         }
     }
 

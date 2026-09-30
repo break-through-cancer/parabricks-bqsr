@@ -18,10 +18,10 @@ nextflow_process {
         }
         then {
             assert process.success
-            def (meta, bam, idx) = process.out[0][0]
-            assert file(bam).name == 'TEST_SAMPLE.recal.bam'
+            def (meta, bam_out, idx) = process.out[0][0]
+            assert file(bam_out).name == 'TEST_SAMPLE.recal.bam'
             assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
-            assert file(bam).bytes == file("${projectDir}/tests/fixtures/modules/sample.bam").bytes
+            assert file(bam_out).bytes == file("${projectDir}/tests/fixtures/modules/sample.bam").bytes
         }
     }
 
@@ -40,10 +40,14 @@ nextflow_process {
         }
         then {
             assert process.success
-            def (meta, cram, idx) = process.out[0][0]
-            assert file(cram).name == 'TEST_SAMPLE.recal.cram'
+            def (meta, cram_out, idx) = process.out[0][0]
+            assert file(cram_out).name == 'TEST_SAMPLE.recal.cram'
             assert file(idx).name == 'TEST_SAMPLE.recal.cram.crai'
-            assert file(cram).bytes[0..3] == 'CRAM'.bytes as List
+            def ref = "${projectDir}/tests/fixtures/modules/reference.fasta"
+            def core = { List lines -> lines.collect { it.trim().tokenize('\t').take(11).join('\t') }.sort() }
+            assert cram(cram_out, ref).getFileType() == 'CRAM'
+            assert core(cram(cram_out, ref).getSamLines()) ==
+                core(bam("${projectDir}/tests/fixtures/modules/sample.bam").getSamLines())
         }
     }
 }

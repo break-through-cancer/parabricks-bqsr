@@ -21,7 +21,7 @@ make test
 ```
 
 `tests/test_quant.c` checks the lookup table against both documented mappings;
-`tests/test_cli.sh` runs the binary on `tests/fixtures/input.sam` (synthetic, one 400 bp
+`tests/test_cli.sh` runs the binary on `tests/fixtures/input.sam` (synthetic, one 500 bp
 contig) and diffs every record against the expected outputs, which were generated
 independently from the spec tables.
 

@@ -70,8 +70,10 @@ Before running nf-test, build the quantizer image once:
 docker build --platform linux/amd64 -t quantize-quals:0.1.0 tools/quantize_quals
 ```
 
-`tests/local/quantize_quals.nf.test` decodes container output with the host's
-`samtools`. All fixtures are tiny synthetic files, not patient data.
+Output content is decoded inside nf-test with the
+[nft-bam](https://github.com/nvnieuwk/nft-bam) plugin (`nf-test.config`); nf-test
+downloads it on first run, so no host `samtools` is needed. All fixtures are tiny
+synthetic files, not patient data.
 
 ## Known gaps
 
@@ -86,10 +88,11 @@ docker build --platform linux/amd64 -t quantize-quals:0.1.0 tools/quantize_quals
 3. **GATK parity (`SPEC.md` §4.5) is not yet checked.** This check requires a real pre-BQSR
    BAM, its recalibration table and a GATK install. The quantizer is verified only
    against the spec's documented mapping tables.
-4. **`SAMTOOLS_FINALIZE` is an addition to `SPEC.md` §2.** Parabricks documents
-   `applybqsr --out-bam` as BAM only. With quantization off, this step indexes the BAM or
-   converts it to CRAM. If Cirro testing shows `applybqsr` writes CRAM directly, this
-   step can be reduced to indexing.
+4. **`SAMTOOLS_FINALIZE` is an addition to `SPEC.md` §2.** The pipeline assumes
+   `applybqsr` writes BAM only: NVIDIA documents its `--out-bam` as "Output BAM file",
+   while `fq2bam` documents "Path of a BAM/CRAM file". With quantization off, this step
+   indexes the BAM or converts it to indexed CRAM. With quantization on,
+   `QUANTIZE_QUALS` writes CRAM directly and this step does not run.
 5. **Cirro wiring (`.cirro/`) is not added yet** (`SPEC.md` §8).
 6. **The quantizer image is local only.** Push `quantize-quals:0.1.0` to a registry
    and set `--quantize_quals_container` before any remote run.
