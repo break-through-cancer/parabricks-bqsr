@@ -10,7 +10,7 @@ process SAMTOOLS_FINALIZE {
     val output_fmt
 
     output:
-    tuple val(meta), path("${meta.sample}.recal.${output_fmt}"), path("${meta.sample}.recal.${output_fmt}.{bai,crai}")
+    tuple val(meta), path("${meta.sample}.recal.${output_fmt}"), path("${meta.sample}.recal.${output_fmt}.{bai,crai}"), emit: alignment
 
     script:
     if (output_fmt == 'bam') {

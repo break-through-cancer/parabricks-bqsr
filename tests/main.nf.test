@@ -1,0 +1,101 @@
+nextflow_pipeline {
+
+    name "Test main.nf pipeline wiring"
+    script "main.nf"
+    options "-stub"
+    config "tests/local/parabricks_applybqsr.nf.config"
+
+    test("quantization enabled: every sample goes APPLYBQSR -> QUANTIZE_QUALS and is published as indexed CRAM") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = true
+                output_fmt             = 'cram'
+            }
+        }
+        then {
+            assert workflow.success
+            def succeeded = workflow.trace.succeeded()*.name
+            assert succeeded.count { it.contains('PARABRICKS_APPLYBQSR') } == 2
+            assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 2
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 0
+            ['SAMPLE_A', 'SAMPLE_B'].each { s ->
+                assert file("${outputDir}/results/quantize_quals/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/quantize_quals/${s}.recal.cram.crai").exists()
+            }
+            assert !file("${outputDir}/results/parabricks_applybqsr").exists()
+        }
+    }
+
+    test("quantization disabled (default): every sample goes APPLYBQSR -> SAMTOOLS_FINALIZE and is published as indexed BAM") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir     = "${outputDir}/results"
+                output_fmt = 'bam'
+            }
+        }
+        then {
+            assert workflow.success
+            def succeeded = workflow.trace.succeeded()*.name
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
+            assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 0
+            ['SAMPLE_A', 'SAMPLE_B'].each { s ->
+                assert file("${outputDir}/results/samtools_finalize/${s}.recal.bam").exists()
+                assert file("${outputDir}/results/samtools_finalize/${s}.recal.bam.bai").exists()
+            }
+        }
+    }
+
+    test("missing --input fails naming the parameter") {
+        when {
+            params {
+                outdir = "${outputDir}/results"
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains('Missing required parameter: input')
+        }
+    }
+
+    test("an output_fmt other than bam/cram fails at startup") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir     = "${outputDir}/results"
+                output_fmt = 'sam'
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains("Invalid output_fmt 'sam'")
+            assert workflow.trace.tasks().size() == 0
+        }
+    }
+
+    test("non-integer static_quantized_quals fails at startup when quantization is enabled") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = true
+                static_quantized_quals = '10,twenty,30'
+            }
+        }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains("Invalid static_quantized_quals '10,twenty,30'")
+            assert workflow.trace.tasks().size() == 0
+        }
+    }
+}

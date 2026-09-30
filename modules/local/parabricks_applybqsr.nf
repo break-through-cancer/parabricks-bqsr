@@ -10,7 +10,7 @@ process PARABRICKS_APPLYBQSR {
     tuple path(ref_fasta), path(ref_fasta_fai)
 
     output:
-    tuple val(meta), path("${meta.sample}.recal.bam")
+    tuple val(meta), path("${meta.sample}.recal.bam"), emit: bam
 
     script:
     def args     = task.ext.args ?: ''

@@ -1,0 +1,3 @@
+sample,alignment,alignment_index,recal_table
+SAMPLE_A,tests/fixtures/modules/sample.cram,tests/fixtures/modules/sample.cram.crai,tests/fixtures/modules/placeholder.recal.table
+SAMPLE_B,tests/fixtures/modules/sample.bam,tests/fixtures/modules/sample.bam.bai,tests/fixtures/modules/placeholder.recal.table
