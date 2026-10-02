@@ -64,9 +64,11 @@ trade cost for speed.
 
 ### Outputs
 
-`<outdir>/quantize_quals/` (quantization on) or `<outdir>/samtools_finalize/`
-(quantization off) holds `<sample>.recal.<bam|cram>` plus its index. The intermediate
-`applybqsr` BAM is not published.
+`<outdir>/preprocessing/recalibrated/<sample>/<sample>.recal.<bam|cram>` plus its index,
+the same layout nf-core/sarek uses for recalibrated alignments, so downstream sarek-based
+variant calling (including Cirro's `sarek_call_variants`) recognises the output. With
+quantization on, this file is the quantized one. The intermediate `applybqsr` BAM is not
+published.
 
 ## Testing
 
@@ -87,6 +89,33 @@ Output content is decoded inside nf-test with the
 downloads it on first run, so no host `samtools` is needed. All fixtures are tiny
 synthetic files, not patient data.
 
+## Cirro
+
+`.cirro/` holds the Cirro custom-pipeline configuration:
+
+| File | Purpose |
+| --- | --- |
+| `process-form.json` | Run form: output format and quantization settings. |
+| `process-input.json` | Maps form values to pipeline parameters; sets the iGenomes GATK.GRCh38 reference from Cirro's references bucket (the reference `sarek_align` uses). |
+| `preprocess.py` | Builds the samplesheet from the input dataset's `preprocessing/parabricks/<sample>/` files: the pre-BQSR fq2bam alignment, its index and its `.table`. Other stages are never used. |
+| `process-compute.config` | AWS Batch overrides: `applybqsr` gets 1 GPU on the on-demand queue (`PW_ONDEMAND_JOB_QUEUE`), as in `sarek_align`; retries on resource-related exit codes. |
+| `process-output.json` | No post-processing commands. |
+
+Registration settings for the custom pipeline:
+
+- **Repository:** `break-through-cancer/parabricks-bqsr`, entry script `main.nf`, configuration directory `.cirro`.
+- **Nextflow version:** `25.10.4` (stub-run verified).
+- **Input dataset:** a `sarek_align` run with the Parabricks aligner and known sites supplied, `save_mapped` on and `baserecalibrator` skipped. That combination publishes `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}`.
+- **Output file mapping:** the same patterns `sarek_align` uses for recalibrated alignments:
+  - `preprocessing/(?P<bamType>recalibrated)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`
+  - `preprocessing/(?P<bamType>recalibrated)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam\.bai|cram\.crai)$`
+
+`preprocess.py` tests run outside Cirro:
+
+```bash
+python -m pytest .cirro
+```
+
 ## Known gaps
 
 1. **`CirroBio/Cirro-pipelines` PR #115 is not merged.** Until it merges, `sarek_align`
@@ -106,4 +135,6 @@ synthetic files, not patient data.
    while `fq2bam` documents "Path of a BAM/CRAM file". With quantization off, this step
    indexes the BAM or converts it to indexed CRAM. With quantization on,
    `QUANTIZE_QUALS` writes CRAM directly and this step does not run.
-5. **Cirro wiring (`.cirro/`) is not added yet** (`SPEC.md` §8).
+5. **The Cirro configuration has not run on Cirro yet.** `preprocess.py` is tested
+   locally and produces the expected samplesheet from a real `sarek_align` dataset
+   listing; the form, input mapping and compute config are untested on the platform.

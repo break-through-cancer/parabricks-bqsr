@@ -21,10 +21,10 @@ nextflow_pipeline {
             assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 2
             assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 0
             ['SAMPLE_A', 'SAMPLE_B'].each { s ->
-                assert file("${outputDir}/results/quantize_quals/${s}.recal.cram").exists()
-                assert file("${outputDir}/results/quantize_quals/${s}.recal.cram.crai").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram.crai").exists()
             }
-            assert !file("${outputDir}/results/parabricks_applybqsr").exists()
+            assert file("${outputDir}/results").list() as List == ['preprocessing']
         }
     }
 
@@ -45,8 +45,8 @@ nextflow_pipeline {
             assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
             assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 0
             ['SAMPLE_A', 'SAMPLE_B'].each { s ->
-                assert file("${outputDir}/results/samtools_finalize/${s}.recal.bam").exists()
-                assert file("${outputDir}/results/samtools_finalize/${s}.recal.bam.bai").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam.bai").exists()
             }
         }
     }

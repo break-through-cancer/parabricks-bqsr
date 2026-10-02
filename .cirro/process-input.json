@@ -1,0 +1,11 @@
+{
+  "input": "$.dataset.s3|/config/manifest.csv",
+  "outdir": "$.dataset.dataPath",
+  "ref_fasta": "$.referencesBucketUri|/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta",
+  "ref_fasta_fai": "$.referencesBucketUri|/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta.fai",
+  "output_fmt": "$.dataset.params.output_fmt",
+  "quantize_quals_enabled": "$.dataset.params.quantization.quantize_quals_enabled",
+  "static_quantized_quals": "$.dataset.params.quantization.static_quantized_quals",
+  "preserve_qscores_less_than": "$.dataset.params.quantization.preserve_qscores_less_than",
+  "round_down_quantized": "$.dataset.params.quantization.round_down_quantized"
+}
