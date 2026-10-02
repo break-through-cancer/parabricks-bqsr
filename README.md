@@ -60,7 +60,7 @@ trade cost for speed.
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
-| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.0` | Quantizer image; see `tools/quantize_quals/README.md`. |
+| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
 ### Outputs
 
@@ -81,7 +81,7 @@ nf-test pulls the quantizer image from GHCR. To test local changes to the tool,
 build and tag it under the same name first:
 
 ```bash
-docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.0 tools/quantize_quals
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1 tools/quantize_quals
 ```
 
 Output content is decoded inside nf-test with the

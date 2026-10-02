@@ -12,6 +12,28 @@ quantize_quals --in in.bam --out out.cram --ref ref.fa \
 Coordinate-sorted BAM/CRAM output is indexed alongside (`out.bam.bai` / `out.cram.crai`).
 Records without qualities (`QUAL = *`) pass through unchanged. An `@PG` line is added.
 
+## Log output
+
+Everything is written to stderr (stdout stays empty), so Nextflow captures it in the
+task's `.command.log`:
+
+```
+quantize_quals 0.1.1 (htslib 1.22.1)
+quantize_quals: input: input/S.recal.bam
+quantize_quals: mode: nearest bin in probability space; preserve Q<6; bins 10,20,30; threads 8
+quantize_quals: mapping: 6-7->6 8-12->10 13-22->20 23+->30
+quantize_quals: output: S.recal.cram (CRAM, indexed, reference Homo_sapiens_assembly38.fasta)
+quantize_quals: progress: 10000000 records, at chr1:23905377, 41.2 s, 242718 records/s
+...
+quantize_quals: done: 812345678 records (1234 without qualities), 121851851700 qualities, 98765432100 changed (81.1%) in 3402.6 s
+quantize_quals: input qualities: Q2:0.1% ... Q34:20.3%
+quantize_quals: output qualities: Q2:0.1% ... Q30:89.4%
+```
+
+The values above are illustrative. `mapping` shows the exact lookup table applied.
+`--progress-every N` sets the progress interval in records (default 10,000,000; `0`
+disables it).
+
 ## Build and test locally
 
 Requires HTSlib (found through `pkg-config`) and `samtools` for the CLI tests.
