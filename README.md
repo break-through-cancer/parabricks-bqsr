@@ -60,7 +60,7 @@ trade cost for speed.
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
-| `--quantize_quals_container` | `quantize-quals:0.1.0` | Quantizer image; see `tools/quantize_quals/README.md`. |
+| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.0` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
 ### Outputs
 
@@ -75,10 +75,11 @@ make -C tools/quantize_quals test   # C unit tests + CLI end-to-end tests (needs
 nf-test test                        # module, subworkflow and pipeline tests (needs Docker)
 ```
 
-Before running nf-test, build the quantizer image once:
+nf-test pulls the quantizer image from GHCR. To test local changes to the tool,
+build and tag it under the same name first:
 
 ```bash
-docker build --platform linux/amd64 -t quantize-quals:0.1.0 tools/quantize_quals
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.0 tools/quantize_quals
 ```
 
 Output content is decoded inside nf-test with the
@@ -106,5 +107,3 @@ synthetic files, not patient data.
    indexes the BAM or converts it to indexed CRAM. With quantization on,
    `QUANTIZE_QUALS` writes CRAM directly and this step does not run.
 5. **Cirro wiring (`.cirro/`) is not added yet** (`SPEC.md` §8).
-6. **The quantizer image is local only.** Push `quantize-quals:0.1.0` to a registry
-   and set `--quantize_quals_container` before any remote run.

@@ -31,10 +31,8 @@ The build stage runs `make test`, so a failing test fails the image build. Alway
 with the version in `src/main.c` (`QQ_VERSION`), never `latest`:
 
 ```bash
-docker build --platform linux/amd64 -t quantize-quals:0.1.0 tools/quantize_quals
-# then push where the executor can pull it, e.g.:
-#   docker tag quantize-quals:0.1.0 ghcr.io/<org>/quantize-quals:0.1.0
-#   docker push ghcr.io/<org>/quantize-quals:0.1.0
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:<version> tools/quantize_quals
+docker push ghcr.io/break-through-cancer/parabricks-bqsr:<version>
 ```
 
-Then point the pipeline at the pushed image with `--quantize_quals_container`.
+Then update `params.quantize_quals_container` in `nextflow.config` to the new tag.
