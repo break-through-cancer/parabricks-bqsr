@@ -83,6 +83,19 @@ nextflow_function {
             assert e.contains('intervals_wrongcontig.bed')
         }
     }
+    test("a known-sites VCF whose contig lengths differ from the FASTA fails (e.g. another assembly)") {
+        function "checkReferences"
+        when { function { """
+            def g = "\${projectDir}/tests/fixtures/genome"
+            input[0] = [ref_fasta: "\$g/reference.fasta", ref_fasta_fai: "\$g/reference.fasta.fai", bwa_index: "\$g/bwa",
+                        known_sites: ["\$g/known_sites_wronglength.vcf.gz"], intervals: null]
+            input[1] = true
+        """ } }
+        then {
+            def e = function.result.errors.join('\n')
+            assert e.contains('known_sites_wronglength.vcf.gz') && e.contains("contig 'chrT' has length 999") && e.contains('500')
+        }
+    }
     test("alignment entry skips index, VCF and BED checks") {
         function "checkReferences"
         when { function { """

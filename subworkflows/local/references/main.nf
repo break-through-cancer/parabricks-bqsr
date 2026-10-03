@@ -85,7 +85,15 @@ def vcfContigs(Object path) {
         .collect { line -> def m = line =~ /ID=([^,>]+)/; m.find() ? m.group(1) : null }
         .findAll() as Set
     def sampled = lines.findAll { !it.startsWith('#') }.take(10000).collect { it.tokenize('\t')[0] } as Set
-    header ? [contigs: header, complete: true] : [contigs: sampled, complete: false]
+    def lengths = lines.findAll { it.startsWith('##contig=') }
+        .collect { line ->
+            def id = line =~ /ID=([^,>]+)/
+            def len = line =~ /length=(\d+)/
+            id.find() && len.find() ? [id.group(1), len.group(1) as Long] : null
+        }
+        .findAll()
+        .collectEntries()
+    header ? [contigs: header, complete: true, lengths: lengths] : [contigs: sampled, complete: false, lengths: [:]]
 }
 
 def intervalContigs(Object path) {
@@ -120,7 +128,10 @@ def checkReferences(Map refs, boolean fastqEntry) {
     refs.known_sites.each { vcf ->
         def v = vcfContigs(vcf)
         def shared = v.contigs.intersect(fai.keySet())
-        if (!shared) {
+        def wrong = shared.find { c -> v.lengths[c] != null && v.lengths[c] != fai[c] }
+        if (wrong) {
+            errors << "Known-sites VCF ${vcf} does not match ${refs.ref_fasta}: contig '${wrong}' has length ${v.lengths[wrong]} in the VCF but ${fai[wrong]} in the FASTA (a different assembly? use --genome null with matching --known_sites for a custom genome)"
+        } else if (!shared) {
             errors << "Known-sites VCF ${vcf} has no contig names in common with ${refs.ref_fasta} (e.g. VCF '${v.contigs.take(3).join("', '")}' vs FASTA '${fai.keySet().take(3).join("', '")}')"
         } else if (v.complete && shared.size() < v.contigs.size()) {
             warnings << "Known-sites VCF ${vcf}: ${v.contigs.size() - shared.size()} of ${v.contigs.size()} contigs are not in ${refs.ref_fasta}"

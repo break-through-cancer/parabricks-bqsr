@@ -18,11 +18,13 @@ rm genome/bwa_mismatch/other.fasta
 printf '##fileformat=VCFv4.2\n##contig=<ID=chrT,length=500>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchrT\t100\trs1\tA\tG\t.\tPASS\t.\n' > genome/known_sites.vcf
 printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchrT\t200\trs2\tC\tT\t.\tPASS\t.\n' > genome/known_sites_nocontig.vcf
 printf '##fileformat=VCFv4.2\n##contig=<ID=1,length=500>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n1\t100\trs1\tA\tG\t.\tPASS\t.\n' > genome/known_sites_wrongcontig.vcf
-for v in known_sites known_sites_nocontig known_sites_wrongcontig; do
+printf '##fileformat=VCFv4.2\n##contig=<ID=chrT,length=999>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchrT\t100\trs1\tA\tG\t.\tPASS\t.\n' > genome/known_sites_wronglength.vcf
+for v in known_sites known_sites_nocontig known_sites_wrongcontig known_sites_wronglength; do
     run "$SAMTOOLS" bgzip -f genome/$v.vcf
 done
 run "$SAMTOOLS" tabix -f -p vcf genome/known_sites.vcf.gz
 run "$SAMTOOLS" tabix -f -p vcf genome/known_sites_wrongcontig.vcf.gz
+run "$SAMTOOLS" tabix -f -p vcf genome/known_sites_wronglength.vcf.gz
 printf '##fileformat=VCFv4.2\n##contig=<ID=chrT,length=500>\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\nchrT\t300\trs3\tG\tA\t.\tPASS\t.\n' | gzip -c > genome/known_sites_plaingzip.vcf.gz
 printf 'chrT\t0\t400\n' > genome/intervals.bed
 printf '1\t0\t400\n' > genome/intervals_wrongcontig.bed
