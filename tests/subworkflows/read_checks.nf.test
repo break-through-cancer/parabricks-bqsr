@@ -1,0 +1,49 @@
+nextflow_function {
+    name "Read-check functions"
+    script "subworkflows/local/read_checks/main.nf"
+
+    test("samtools stats counts") {
+        function "samtoolsStatsCounts"
+        when { function { """
+            def f = file("\${launchDir}/s.stats"); f.text = 'SN\\traw total sequences:\\t10\\t# x\\nSN\\tnon-primary alignments:\\t1\\nSN\\tsupplementary alignments:\\t2\\n'
+            input[0] = f
+        """ } }
+        then { assert function.result == [primary: 10L, records: 13L] }
+    }
+    test("idxstats total includes the unplaced line") {
+        function "idxstatsTotal"
+        when { function { """
+            def f = file("\${launchDir}/i.txt"); f.text = 'chrT\\t500\\t9\\t1\\n*\\t0\\t0\\t3\\n'
+            input[0] = f
+        """ } }
+        then { assert function.result == 13L }
+    }
+    test("fastp count uses before-filtering when not trimming, after when trimming") {
+        function "fastpReadCount"
+        when { function { """
+            def f = file("\${launchDir}/f.json"); f.text = '{"summary":{"before_filtering":{"total_reads":100},"after_filtering":{"total_reads":90}}}'
+            input[0] = f
+            input[1] = true
+        """ } }
+        then { assert function.result == 90L }
+    }
+    test("equal counts pass") {
+        function "readCheckFailures"
+        when { function { "input[0] = [sample: 'S', fastq_reads: 10L, before_records: 13L, final_primary: 10L, final_records: 13L]" } }
+        then { assert function.result == [] }
+    }
+    test("mismatches name both counts and causes") {
+        function "readCheckFailures"
+        when { function { "input[0] = [sample: 'S', fastq_reads: 12L, before_records: 14L, final_primary: 10L, final_records: 13L]" } }
+        then {
+            def m = function.result.join('\n')
+            assert m.contains("Sample 'S': FASTQ reads (12) != final primary reads (10)") && m.contains('--max-read-length')
+            assert m.contains("Sample 'S': records before BQSR/finalize (14) != final records (13)")
+        }
+    }
+    test("alignment entry skips the FASTQ check") {
+        function "readCheckFailures"
+        when { function { "input[0] = [sample: 'S', fastq_reads: null, before_records: 13L, final_primary: 10L, final_records: 13L]" } }
+        then { assert function.result == [] }
+    }
+}
