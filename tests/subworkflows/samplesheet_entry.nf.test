@@ -1,0 +1,18 @@
+nextflow_function {
+    name "Test samplesheetEntry"
+    script "subworkflows/local/samplesheet_to_fastqs/main.nf"
+    function "samplesheetEntry"
+
+    test("fastq header") {
+        when { function { "input[0] = \"\${projectDir}/tests/fixtures/fastq/valid.csv\"" } }
+        then { assert function.result == 'fastq' }
+    }
+    test("alignment header") {
+        when { function { "input[0] = \"\${projectDir}/tests/fixtures/samplesheet_to_samples/valid.csv\"" } }
+        then { assert function.result == 'alignment' }
+    }
+    test("both kinds of column is an error") {
+        when { function { "input[0] = \"\${projectDir}/tests/fixtures/fastq/both_entries.csv\"" } }
+        then { assert function.failed; assert function.stdout.join('\n').contains('both FASTQ and alignment columns') }
+    }
+}
