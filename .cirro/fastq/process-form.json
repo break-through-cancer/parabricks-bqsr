@@ -20,7 +20,7 @@
               }},
               {"properties": {
                 "genome_source": {"enum": ["dataset"]},
-                "genome_index": {"title": "BWA Genome Index", "type": "string", "pathType": "dataset",
+                "genome_index": {"title": "BWA Genome Index", "type": "string", "pathType": "dataset", "process": ["process-cirro-genome-index-bwa-1-0", "genome_bwa_index"],
                   "description": "A pre-built BWA (not BWA-MEM2) genome index dataset containing genome.fasta and genome.fasta.fai."},
                 "dbsnp": {"title": "Known Sites (VCF)", "type": "string", "pathType": "references", "file": "**/germline_resource/**/germline_resource.vcf.gz", "useS3Path": true,
                   "description": "Optional. Without any known sites, BQSR is skipped and outputs are published as .md files."},

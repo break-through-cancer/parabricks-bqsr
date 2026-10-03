@@ -123,3 +123,23 @@ def test_every_references_library_field_requests_an_s3_path():
     refs = list(fields(form))
     assert len(refs) == 3
     assert all(f.get("useS3Path") is True for f in refs), [f["title"] for f in refs if not f.get("useS3Path")]
+
+
+def test_every_dataset_field_is_filtered_by_process():
+    import json
+    form = json.loads(pathlib.Path(__file__).with_name("process-form.json").read_text())
+
+    def fields(node, key=None):
+        if isinstance(node, dict):
+            if node.get("pathType") == "dataset":
+                yield key, node
+            for k, value in node.items():
+                yield from fields(value, k)
+        elif isinstance(node, list):
+            for value in node:
+                yield from fields(value, key)
+
+    datasets = dict(fields(form))
+    assert datasets, "expected at least one dataset field"
+    assert all(f.get("process") for f in datasets.values()), [k for k, f in datasets.items() if not f.get("process")]
+    assert datasets["genome_index"]["process"] == ["process-cirro-genome-index-bwa-1-0", "genome_bwa_index"]
