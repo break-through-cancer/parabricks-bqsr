@@ -1,0 +1,101 @@
+nextflow_function {
+    name "Reference resolution and checks"
+    script "subworkflows/local/references/main.nf"
+
+    test("GATK.GRCh38 defaults resolve under igenomes_base, trailing slash tolerated") {
+        function "resolveReferences"
+        when { function { """
+            input[0] = [genome: 'GATK.GRCh38', igenomes_base: 's3://b/igenomes/', no_intervals: false]
+        """ } }
+        then {
+            def r = function.result
+            assert r.ref_fasta == 's3://b/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta'
+            assert r.ref_fasta_fai == r.ref_fasta + '.fai'
+            assert r.bwa_index == 's3://b/igenomes/Homo_sapiens/GATK/GRCh38/Sequence/BWAIndex/'
+            assert r.known_sites.size() == 3 && r.known_sites.every { it.endsWith('.vcf.gz') }
+            assert r.intervals.endsWith('Annotation/intervals/wgs_calling_regions_noseconds.hg38.bed')
+            assert r.intervals_source == 'genome'
+        }
+    }
+    test("explicit params beat genome defaults") {
+        function "resolveReferences"
+        when { function { """
+            input[0] = [genome: 'GATK.GRCh38', igenomes_base: 's3://b/igenomes', ref_fasta: '/x/r.fa',
+                        known_sites: '/x/a.vcf.gz, /x/b.vcf.gz', intervals: '/x/i.bed', no_intervals: false]
+        """ } }
+        then {
+            def r = function.result
+            assert r.ref_fasta == '/x/r.fa' && r.ref_fasta_fai == '/x/r.fa.fai'
+            assert r.known_sites == ['/x/a.vcf.gz', '/x/b.vcf.gz']
+            assert r.intervals == '/x/i.bed' && r.intervals_source == 'explicit'
+        }
+    }
+    test("no_intervals wins over the genome default without error") {
+        function "resolveReferences"
+        when { function { "input[0] = [genome: 'GATK.GRCh38', igenomes_base: 's3://b/igenomes', no_intervals: true]" } }
+        then { assert function.result.intervals == null; assert function.result.intervals_source == 'disabled' }
+    }
+    test("explicit intervals with no_intervals is an error") {
+        function "resolveReferences"
+        when { function { "input[0] = [genome: 'GATK.GRCh38', igenomes_base: 's3://b', intervals: '/x/i.bed', no_intervals: true]" } }
+        then { assert function.failed; assert function.stdout.join('\n').contains('--intervals and --no_intervals cannot be combined') }
+    }
+    test("genome 'null' string means custom genome and requires ref_fasta") {
+        function "resolveReferences"
+        when { function { "input[0] = [genome: 'null', igenomes_base: 's3://b', no_intervals: false]" } }
+        then { assert function.failed; assert function.stdout.join('\n').contains('--ref_fasta is required') }
+    }
+    test("custom genome with no known sites or intervals") {
+        function "resolveReferences"
+        when { function { "input[0] = [genome: null, ref_fasta: '/x/r.fa', bwa_index: '/x/bwa', no_intervals: false]" } }
+        then {
+            def r = function.result
+            assert r.known_sites == [] && r.intervals == null && r.intervals_source == 'none'
+        }
+    }
+    test("unknown genome is an error naming the built-in genomes") {
+        function "resolveReferences"
+        when { function { "input[0] = [genome: 'CanFam3', igenomes_base: 's3://b', no_intervals: false]" } }
+        then { assert function.failed; assert function.stdout.join('\n').contains("Unknown genome 'CanFam3'") }
+    }
+    test("matching BWA index, VCF and BED pass") {
+        function "checkReferences"
+        when { function { """
+            def g = "\${projectDir}/tests/fixtures/genome"
+            input[0] = [ref_fasta: "\$g/reference.fasta", ref_fasta_fai: "\$g/reference.fasta.fai", bwa_index: "\$g/bwa",
+                        known_sites: ["\$g/known_sites.vcf.gz", "\$g/known_sites_nocontig.vcf.gz"], intervals: "\$g/intervals.bed"]
+            input[1] = true
+        """ } }
+        then { assert function.result.errors == []; assert function.result.warnings == [] }
+    }
+    test("mismatched BWA index, wrong-contig VCF and BED fail with named files") {
+        function "checkReferences"
+        when { function { """
+            def g = "\${projectDir}/tests/fixtures/genome"
+            input[0] = [ref_fasta: "\$g/reference.fasta", ref_fasta_fai: "\$g/reference.fasta.fai", bwa_index: "\$g/bwa_mismatch",
+                        known_sites: ["\$g/known_sites_wrongcontig.vcf.gz"], intervals: "\$g/intervals_wrongcontig.bed"]
+            input[1] = true
+        """ } }
+        then {
+            def e = function.result.errors.join('\n')
+            assert e.contains('BWA index') && e.contains('bwa_mismatch')
+            assert e.contains('known_sites_wrongcontig.vcf.gz') && e.contains('no contig names in common')
+            assert e.contains('intervals_wrongcontig.bed')
+        }
+    }
+    test("alignment entry skips index, VCF and BED checks") {
+        function "checkReferences"
+        when { function { """
+            def g = "\${projectDir}/tests/fixtures/genome"
+            input[0] = [ref_fasta: "\$g/reference.fasta", ref_fasta_fai: "\$g/reference.fasta.fai", bwa_index: "\$g/bwa_mismatch",
+                        known_sites: ["\$g/known_sites_wrongcontig.vcf.gz"], intervals: null]
+            input[1] = false
+        """ } }
+        then { assert function.result.errors == [] }
+    }
+    test("VCF without contig header falls back to sampled data lines") {
+        function "vcfContigs"
+        when { function { "input[0] = \"\${projectDir}/tests/fixtures/genome/known_sites_nocontig.vcf.gz\"" } }
+        then { assert (function.result.contigs as Set) == (['chrT'] as Set); assert function.result.complete == false }
+    }
+}
