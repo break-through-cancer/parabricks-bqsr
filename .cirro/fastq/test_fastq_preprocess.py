@@ -104,3 +104,22 @@ def test_read_1_without_a_matching_read_2_in_a_paired_sample_is_an_error():
     ])
     with pytest.raises(ValueError, match="S1_B_R1.fastq.gz"):
         build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+
+
+def test_every_references_library_field_requests_an_s3_path():
+    import json
+    form = json.loads(pathlib.Path(__file__).with_name("process-form.json").read_text())
+
+    def fields(node):
+        if isinstance(node, dict):
+            if node.get("pathType") == "references":
+                yield node
+            for value in node.values():
+                yield from fields(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from fields(value)
+
+    refs = list(fields(form))
+    assert len(refs) == 3
+    assert all(f.get("useS3Path") is True for f in refs), [f["title"] for f in refs if not f.get("useS3Path")]

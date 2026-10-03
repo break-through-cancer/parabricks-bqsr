@@ -26,7 +26,7 @@
                   "description": "Optional. Without any known sites, BQSR is skipped and outputs are published as .md files."},
                 "known_indels": {"title": "Known Indels (VCF)", "type": "string", "pathType": "references", "file": "**/germline_resource/**/germline_resource.vcf.gz", "useS3Path": true,
                   "description": "Optional second known-sites VCF."},
-                "custom_intervals": {"title": "Intervals (BED)", "type": "string", "pathType": "references", "file": "**/genome_bed/**/regions.bed",
+                "custom_intervals": {"title": "Intervals (BED)", "type": "string", "pathType": "references", "file": "**/genome_bed/**/regions.bed", "useS3Path": true,
                   "description": "Optional. Restricts BQSR table building only."}
               }, "required": ["genome_index"]}
             ]
