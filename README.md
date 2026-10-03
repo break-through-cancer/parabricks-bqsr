@@ -1,143 +1,233 @@
 # parabricks_bqsr
 
-Standalone Nextflow pipeline that applies a `sarek_align` BQSR recalibration table
-genome-wide with NVIDIA Parabricks `applybqsr`. It can also replicate GATK `ApplyBQSR`'s
-static quality-score quantization (`--static-quantized-quals`), a step Parabricks does not
-provide.
+Nextflow pipeline for GPU alignment and base quality score recalibration with NVIDIA
+Parabricks. Starting from FASTQs (the main entry point) or from an existing alignment plus
+its BQSR table, it applies BQSR genome-wide with `pbrun applybqsr` (never restricted to
+intervals, so unmapped and off-target reads are recalibrated too) and can replicate GATK
+`ApplyBQSR`'s static quality-score quantization, a step Parabricks does not provide.
 
 ```
-samplesheet ─▶ SAMPLESHEET_TO_SAMPLES ─▶ PARABRICKS_APPLYBQSR (no intervals, BAM)
-                                              │
-                   quantize_quals_enabled ────┤
-                                  true        ▼        false
-                          QUANTIZE_QUALS           SAMTOOLS_FINALIZE
-                                   └──── <sample>.recal.{bam,cram} + index ────┘
+FASTQ samplesheet                          alignment + table samplesheet
+      │                                          │
+FASTP (per lane: read counts, read QC,           │
+       optional trimming)                        │
+      │                                          │
+PARABRICKS_FQ2BAM (per sample, GPU:              │
+  alignment, duplicate marking, BQSR table)      │
+      │                                          │
+      ├─ known sites ─▶ PARABRICKS_APPLYBQSR (GPU, genome-wide) ◀─┘
+      │                        │
+      │                QUANTIZE_QUALS or SAMTOOLS_FINALIZE
+      │                        └─▶ preprocessing/recalibrated/<s>/<s>.recal.<cram|bam>
+      └─ no known sites ─▶ QUANTIZE_QUALS or SAMTOOLS_FINALIZE
+                               └─▶ preprocessing/markduplicates/<s>/<s>.md.<cram|bam>
+
+QC: samtools stats, mosdepth, read-count checks, MultiQC
 ```
 
-## Local usage
+## Usage
 
 ```bash
-nextflow run main.nf --input samplesheet.csv
-nextflow run main.nf --input samplesheet.csv --quantize_quals_enabled false --output_fmt bam
+nextflow run main.nf --input fastq_samplesheet.csv
+nextflow run main.nf --input alignment_samplesheet.csv --quantize_quals_enabled false --output_fmt bam
 ```
 
-`--input` is the only required parameter. Invalid parameter values, missing samplesheet
-values and nonexistent paths all fail at startup with a message naming the problem.
+`--input` is the only required parameter. The samplesheet header selects the entry point:
+a `fastq_1` column means FASTQ input, an `alignment` column means alignment + table
+input; both together is an error. Invalid parameters, missing samplesheet values,
+nonexistent paths and mismatched reference files fail at startup with a message naming
+the problem.
 
-### Samplesheet format
+`--input` may be local or `s3://`; a relative `--input` resolves against the launch
+directory. Paths inside samplesheets may be `s3://` and are checked at startup. Use
+absolute or `s3://` paths inside samplesheets for AWS Batch runs: relative row paths
+resolve against the pipeline directory (`projectDir`), which suits the test fixtures only.
 
-CSV, one row per sample. See `assets/samplesheet.csv`.
+### FASTQ samplesheet
+
+One row per lane. See `assets/samplesheet_fastq.csv`.
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `patient` | no (defaults to `sample`) | Groups samples; part of the read group `SM`. |
+| `sample` | yes | Sample ID. |
+| `status` | no (defaults to `0`) | `0` normal, `1` tumor (adds BWA `-B 3`). |
+| `lane` | yes | Lane identifier, unique within a sample. |
+| `fastq_1` | yes | Read 1, or the single-end FASTQ. |
+| `fastq_2` | no | Read 2; empty means single-end. |
+
+Read groups follow nf-core/sarek: `ID` and `PU` are `<flowcell>.<sample>.<lane>` (flowcell
+from the first Illumina read header, `unknown` otherwise), `SM` is `<patient>_<sample>`,
+`LB` is `<sample>`, `PL` is `--seq_platform`. All lanes of a sample go into one `fq2bam`
+call, giving one alignment and one BQSR table per sample. A sample cannot mix paired-end
+and single-end lanes.
+
+### Alignment + table samplesheet
+
+One row per sample. See `assets/samplesheet.csv`.
 
 | Column | Meaning |
 | --- | --- |
-| `sample` | Sample ID; must be unique within the samplesheet. |
-| `alignment` | Aligned BAM or CRAM from `sarek_align`. |
+| `sample` | Sample ID; unique within the samplesheet. |
+| `alignment` | Pre-BQSR BAM or CRAM, e.g. the fq2bam output of `sarek_align`. |
 | `alignment_index` | Its `.bai` / `.crai`. |
-| `recal_table` | The BQSR recalibration table `sarek_align` publishes for that sample. |
+| `recal_table` | The BQSR table for that alignment. |
 
-`--input` itself may be local or `s3://`; a relative `--input` resolves against the launch
-directory. Paths inside the samplesheet may be `s3://` (or any URI Nextflow supports)
-and are checked for existence at startup. Use absolute or `s3://` paths inside the
-samplesheet for AWS Batch runs: relative row paths resolve against the pipeline
-directory (`projectDir`) on the head node, which suits the committed test fixtures only.
+The alignment header contigs must match the selected genome; otherwise the task stops
+before `applybqsr` runs.
+
+### Genomes
+
+`--genome` selects a built-in genome; explicit parameters override its defaults.
+
+- **`--genome GATK.GRCh38` (default):** FASTA, BWA index, known sites (dbSNP 146, Mills
+  and 1000G gold-standard indels, known indels) and WGS calling intervals from iGenomes
+  under `--igenomes_base` (default `s3://ngi-igenomes/igenomes/`).
+- **Custom genome (`--genome null`):** `--ref_fasta` (and `--ref_fasta_fai`, default
+  `<fasta>.fai`), `--bwa_index` (directory holding a classic BWA index of that FASTA),
+  optional `--known_sites` (comma-separated `.vcf.gz`), optional `--intervals`.
+
+**Resolution:** every reference takes the explicit parameter if given, else the genome
+default. `--no_intervals` turns intervals off, including a genome default; combining it
+with an explicit `--intervals` is an error.
+
+**Known sites:** only the `.vcf.gz` files are passed to `fq2bam`. A VCF without a `.tbi`
+is indexed automatically (it must be bgzip-compressed). With no known sites, BQSR is
+skipped and outputs are published as `.md` files under `preprocessing/markduplicates/`.
+
+**Intervals** restrict BQSR table building only; reads outside them are still aligned,
+output and recalibrated. Without intervals the table is built genome-wide, with a warning.
+
+**Startup checks** (headers and index files only): the BWA index matches the FASTA; each
+known-sites VCF and the intervals share contig names with the FASTA (zero overlap fails;
+partial VCF overlap warns).
 
 ### GPU
 
-`PARABRICKS_APPLYBQSR` requests one GPU (`accelerator = 1` in `conf/modules.config`).
-On AWS Batch this places the task on a GPU compute environment and passes
-`--num-gpus 1` to `pbrun`. With the local executor and Docker, `--gpus all` is added to
-the container options. `applybqsr` uses at most two GPUs; raise `accelerator` to `2` to
-trade cost for speed.
+`PARABRICKS_FQ2BAM` requests `--fq2bam_gpus` GPUs (default 1); `PARABRICKS_APPLYBQSR`
+requests 1 (`pbrun applybqsr` accepts only 1 or 2). On AWS Batch, `accelerator` places
+the task on a GPU compute environment; with the local executor and Docker, `--gpus all`
+is added. Local runs need a Linux host with an NVIDIA GPU.
 
 ### Parameters
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `--outdir` | `./results` | Output directory. |
-| `--ref_fasta` / `--ref_fasta_fai` | hg38 from `s3://broad-references` | Reference used for alignment. |
-| `--output_fmt` | `cram` | `bam` or `cram`; independent of input format. |
-| `--quantize_quals_enabled` | `true` | Run `QUANTIZE_QUALS` after `applybqsr`; `false` publishes the unquantized recalibrated output instead. |
+| `--genome` | `GATK.GRCh38` | Built-in genome, or `null` for a custom genome. |
+| `--igenomes_base` | `s3://ngi-igenomes/igenomes/` | Base path for built-in genome files. |
+| `--ref_fasta`, `--ref_fasta_fai`, `--bwa_index`, `--known_sites`, `--intervals` | from `--genome` | Explicit reference overrides. |
+| `--no_intervals` | `false` | Build the BQSR table genome-wide. |
+| `--seq_platform` | `ILLUMINA` | Read group `PL`. |
+| `--trim_fastq` | `false` | Enable fastp trimming (fastp always runs for counts and QC). |
+| `--clip_r1`, `--clip_r2` | `0` | Bases removed from the 5′ end of read 1 / read 2. |
+| `--three_prime_clip_r1`, `--three_prime_clip_r2` | `0` | Bases removed from the 3′ end. |
+| `--trim_nextseq` | `false` | Trim poly-G tails (two-colour instruments). |
+| `--length_required` | `15` | Minimum read length after trimming. |
+| `--save_trimmed` | `false` | Publish trimmed FASTQs. |
+| `--markdups_se_mode` | `5prime` | Single-end duplicate marking: `5prime` (standard) or `start-end` (adapter-trimmed short fragments such as cfDNA). |
+| `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
+| `--fq2bam_gpus` | `1` | GPUs for alignment. |
+| `--output_fmt` | `cram` | `bam` or `cram`. |
+| `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
 | `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
+Quality filtering in fastp is always disabled (BQSR handles base qualities); with
+trimming on, `--length_required` is the only filter that removes reads.
+
 ### Outputs
 
-`<outdir>/preprocessing/recalibrated/<sample>/<sample>.recal.<bam|cram>` plus its index,
-the same layout nf-core/sarek uses for recalibrated alignments, so downstream sarek-based
-variant calling (including Cirro's `sarek_call_variants`) recognises the output. With
-quantization on, this file is the quantized one. The intermediate `applybqsr` BAM is not
-published.
+```
+preprocessing/recalibrated/<s>/<s>.recal.<cram|bam> (+ index)   BQSR ran
+preprocessing/markduplicates/<s>/<s>.md.<cram|bam> (+ index)    no known sites
+preprocessing/recal_table/<s>/<s>.table                          FASTQ entry with known sites
+preprocessing/fastp/<s>/                                         --save_trimmed only
+reports/fastp/<s>/, reports/markduplicates/<s>/, reports/parabricks_qc/<s>/,
+reports/samtools/<s>/, reports/mosdepth/<s>/, reports/quantize/<s>/
+multiqc/multiqc_report.html
+pipeline_info/
+```
+
+The layout matches nf-core/sarek, so sarek-based variant calling (including Cirro's
+`sarek_call_variants`) recognises the outputs. The pre-BQSR `fq2bam` CRAM and the
+intermediate `applybqsr` BAM are not published.
+
+### Read-count checks
+
+Each run fails if reads go missing:
+- **FASTQ → final:** fastp read total (before filtering, or after filtering when trimming)
+  equals the final file's primary reads (`samtools stats` raw total).
+- **Before → final:** records in the `fq2bam` output (FASTQ entry) or the input alignment
+  (alignment entry) equal the final file's records.
+
+The FASTQ check names `fq2bam`'s 480 bp maximum read length and zero-length reads as the
+likely causes of a mismatch. Results appear in the log and in MultiQC.
 
 ## Testing
 
 ```bash
-make -C tools/quantize_quals test   # C unit tests + CLI end-to-end tests (needs HTSlib, samtools)
-nf-test test                        # module, subworkflow and pipeline tests (needs Docker)
+make -C tools/quantize_quals test      # C unit tests + CLI tests (needs HTSlib, samtools)
+nf-test test                           # modules, subworkflows, pipeline (needs Docker)
+python -m pytest tests/config .cirro   # GPU config checks, Cirro preprocess (needs nextflow, pandas)
 ```
 
-nf-test pulls the quantizer image from GHCR. To test local changes to the tool,
-build and tag it under the same name first:
+Parabricks steps run under `-stub` locally; real execution needs an NVIDIA GPU. nf-test
+pulls the quantizer image from GHCR; to test local changes to the tool, build and tag it
+under the same name first:
 
 ```bash
 docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1 tools/quantize_quals
 ```
 
 Output content is decoded inside nf-test with the
-[nft-bam](https://github.com/nvnieuwk/nft-bam) plugin (`nf-test.config`); nf-test
-downloads it on first run, so no host `samtools` is needed. All fixtures are tiny
-synthetic files, not patient data.
+[nft-bam](https://github.com/nvnieuwk/nft-bam) plugin. All fixtures are small synthetic
+files (`tests/fixtures/make_fixtures.sh` regenerates the genome and FASTQ fixtures).
 
 ## Cirro
 
-`.cirro/` holds the Cirro custom-pipeline configuration:
+Two process registrations come from this repository:
 
-| File | Purpose |
-| --- | --- |
-| `process-form.json` | Run form: output format and quantization settings. |
-| `process-input.json` | Maps form values to pipeline parameters; sets the iGenomes GATK.GRCh38 reference from Cirro's references bucket (the reference `sarek_align` uses). |
-| `preprocess.py` | Builds the samplesheet from the input dataset's `preprocessing/parabricks/<sample>/` files: the pre-BQSR fq2bam alignment, its index and its `.table`. Other stages are never used. |
-| `process-compute.config` | AWS Batch overrides: `applybqsr` gets 1 GPU on the on-demand queue (`PW_ONDEMAND_JOB_QUEUE`), as in `sarek_align`; retries on resource-related exit codes. |
-| `process-output.json` | No post-processing commands. |
+| Directory | Entry point | Input dataset |
+| --- | --- | --- |
+| `.cirro/fastq/` | FASTQ | Paired or single-end FASTQ datasets |
+| `.cirro/alignment/` | alignment + table | A `sarek_align` dataset with `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}` (Parabricks aligner, known sites, `save_mapped` on, `baserecalibrator` skipped) |
 
-Registration settings for the custom pipeline:
+Each directory holds `process-form.json`, `process-input.json`, `preprocess.py`,
+`process-compute.config` and `process-output.json`. Both Parabricks processes run on the
+on-demand GPU queue (`PW_ONDEMAND_JOB_QUEUE`) with retries on resource-related exit codes.
 
-- **Repository:** `break-through-cancer/parabricks-bqsr`, entry script `main.nf`, configuration directory `.cirro`.
-- **Nextflow version:** `25.10.4` (stub-run verified).
-- **Input dataset:** a `sarek_align` run with the Parabricks aligner and known sites supplied, `save_mapped` on and `baserecalibrator` skipped. That combination publishes `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}`.
-- **Output file mapping:** the same patterns `sarek_align` uses for recalibrated alignments:
-  - `preprocessing/(?P<bamType>recalibrated)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`
-  - `preprocessing/(?P<bamType>recalibrated)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam\.bai|cram\.crai)$`
+**FASTQ form:** genome source (iGenomes GATK.GRCh38 with an intervals checkbox, or a
+custom genome: a BWA index dataset containing `genome.fasta`, optional known-sites VCFs
+from the references library under `germline_resource`, optional BED under `genome_bed`),
+output format, quantization, trimming, single-end duplicate marking, optical pixel
+distance and alignment GPUs.
 
-`preprocess.py` tests run outside Cirro:
-
-```bash
-python -m pytest .cirro
-```
+**Registration settings:** repository `break-through-cancer/parabricks-bqsr`, entry
+script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
+`25.10.4` or later (stub runs verified on 25.10.4 and 26.04.x). A registration created
+before `.cirro/alignment/` existed must be re-pointed to that directory. Output file
+mapping can reuse `sarek_align`'s patterns:
+- `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`
+- `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam\.bai|cram\.crai)$`
 
 ## Known gaps
 
-1. **`CirroBio/Cirro-pipelines` PR #115 is not merged.** Until it merges, `sarek_align`
-   does not publish the recalibration table, so a real `recal_table` input requires a
-   manual `sarek_align` run on a branch carrying commit `47a75115`.
-2. **No real Parabricks execution has been validated.** The dev machine has no NVIDIA
-   GPU, so `PARABRICKS_APPLYBQSR` is tested only through `-stub`. Real validation must
-   happen on Cirro against a GPU instance. Items to confirm there: the `accelerator`
-   request co-existing with Cirro's own GPU compute config, `stageInMode 'copy'`
-   (inherited from the nf-core Parabricks modules; `--preserve-file-symlinks` may remove
-   the copy) and CPU/memory sizing.
-3. **GATK parity is not yet checked.** The reference path is GATK `ApplyBQSR
-   --static-quantized-quals 10 20 30 --preserve-qscores-less-than 6`; the test path is
-   Parabricks `applybqsr` followed by `quantize_quals` with the same settings, on the same
-   pre-BQSR BAM and table. Records should match exactly. This needs a GATK install and
-   real data; the quantizer is so far verified against its documented mapping tables
-   only.
-4. **`SAMTOOLS_FINALIZE` exists because of a Parabricks limitation.** The pipeline assumes
-   `applybqsr` writes BAM only: NVIDIA documents its `--out-bam` as "Output BAM file",
-   while `fq2bam` documents "Path of a BAM/CRAM file". With quantization off, this step
-   indexes the BAM or converts it to indexed CRAM. With quantization on,
-   `QUANTIZE_QUALS` writes CRAM directly and this step does not run.
-5. **The Cirro configuration has not run on Cirro yet.** `preprocess.py` is tested
-   locally and produces the expected samplesheet from a real `sarek_align` dataset
-   listing; the form, input mapping and compute config are untested on the platform.
+1. **The FASTQ entry point has not run on a GPU.** Validation on Cirro, in order:
+   - V1: a low-pass human sample from FASTQ (read checks, `fq2bam` writing `.crai`, QC
+     directory contents, `--memory-limit`, resource sizing).
+   - V2: a single-lane sample compared with `sarek_align` on the same FASTQs (read groups,
+     mapping and duplicate rates, identical table, matching pre-BQSR records).
+   - V3: a single-end sample with both duplicate-marking modes.
+   - V4: one `fq2bam` call with paired and single-end inputs (decides whether the
+     mixed-sample rejection can be lifted).
+   - V5: a canine custom genome with and without known sites.
+   - V6: low-pass tables (observations per read group below 1x).
+   - V7: quantization parity with GATK `ApplyBQSR --static-quantized-quals`.
+2. **`stageInMode 'copy'`** is inherited from the nf-core Parabricks modules;
+   `--preserve-file-symlinks` may make the copy unnecessary.
+3. **`SAMTOOLS_FINALIZE` exists because `applybqsr` writes BAM only** (NVIDIA documents
+   its `--out-bam` as "Output BAM file"). With quantization on, `QUANTIZE_QUALS` writes
+   CRAM directly and this step does not run.
