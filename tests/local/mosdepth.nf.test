@@ -1,0 +1,16 @@
+nextflow_process {
+    name "Test MOSDEPTH"
+    script "modules/local/mosdepth.nf"
+    process "MOSDEPTH"
+    test("writes summary and global distribution") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.bam"), file("\$m/sample.bam.bai")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then {
+            assert process.success
+            assert process.out.reports[0][1].collect { file(it).name }.sort() == ['S.mosdepth.global.dist.txt', 'S.mosdepth.summary.txt']
+        }
+    }
+}

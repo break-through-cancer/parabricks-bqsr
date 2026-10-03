@@ -1,0 +1,17 @@
+nextflow_process {
+    name "Test SAMTOOLS_STATS"
+    script "modules/local/samtools_stats.nf"
+    process "SAMTOOLS_STATS"
+    test("reports raw total and non-primary counts for a CRAM") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.cram"), file("\$m/sample.cram.crai")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then {
+            assert process.success
+            def t = file(process.out.stats[0][1]).text
+            assert t.contains('raw total sequences:\t10') && t.contains('non-primary alignments:\t1')
+        }
+    }
+}
