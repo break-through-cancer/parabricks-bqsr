@@ -19,3 +19,5 @@ docs/
 SPEC.md
 CLAUDE.md
 .claude/
+bqsr_flag_specs.txt
+future-feature_quantize-quals.txt
