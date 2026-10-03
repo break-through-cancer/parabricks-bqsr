@@ -3,7 +3,14 @@ import logging
 import pandas as pd
 import pytest
 
-from preprocess import apply_genome_params, build_fastq_samplesheet
+import importlib.util
+import pathlib
+
+_spec = importlib.util.spec_from_file_location("fastq_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
+_preprocess = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_preprocess)
+apply_genome_params = _preprocess.apply_genome_params
+build_fastq_samplesheet = _preprocess.build_fastq_samplesheet
 
 LOG = logging.getLogger("test")
 

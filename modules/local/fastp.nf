@@ -11,7 +11,7 @@ process FASTP {
     output:
     tuple val(meta), path("${meta.id}.fastp.json"), emit: json
     tuple val(meta), path("${meta.id}.fastp.html"), emit: html
-    tuple val(meta), path(trim ? "${meta.id}_*.trimmed.fastq.gz" : 'input/*', includeInputs: true), emit: reads
+    tuple val(meta), path("${meta.id}_*.fastq.gz"), emit: reads
 
     script:
     def args = fastpArgs(meta, reads, [
@@ -19,13 +19,16 @@ process FASTP {
         three_prime_clip_r1: params.three_prime_clip_r1, three_prime_clip_r2: params.three_prime_clip_r2,
         trim_nextseq: params.trim_nextseq, length_required: params.length_required, threads: task.cpus
     ])
+    def links = trim ? '' : (reads instanceof List ? reads : [reads]).withIndex().collect { r, i -> "ln -s ${r} ${meta.id}_${i + 1}.fastq.gz" }.join('\n    ')
     """
     set -euo pipefail
     fastp ${args}
+    ${links}
     """
 
     stub:
-    def outs = trim ? (meta.single_end ? ["${meta.id}_1.trimmed.fastq.gz"] : ["${meta.id}_1.trimmed.fastq.gz", "${meta.id}_2.trimmed.fastq.gz"]) : []
+    def n = meta.single_end ? 1 : 2
+    def outs = (1..n).collect { i -> trim ? "${meta.id}_${i}.trimmed.fastq.gz" : "${meta.id}_${i}.fastq.gz" }
     """
     echo '{"summary":{"before_filtering":{"total_reads":0},"after_filtering":{"total_reads":0}}}' > ${meta.id}.fastp.json
     touch ${meta.id}.fastp.html ${outs.join(' ')}

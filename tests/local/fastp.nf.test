@@ -13,7 +13,8 @@ nextflow_process {
             assert process.success
             def json = new groovy.json.JsonSlurper().parse(file(process.out.json[0][1]))
             assert json.summary.before_filtering.total_reads == 80
-            assert process.out.reads[0][1].collect { file(it).name } == ['S1_L1_R1.fastq.gz', 'S1_L1_R2.fastq.gz']
+            assert process.out.reads[0][1].collect { file(it).name } == ['S1_1_1.fastq.gz', 'S1_1_2.fastq.gz']
+            assert process.out.reads[0][1].collect { file(it).canonicalFile.name } == ['S1_L1_R1.fastq.gz', 'S1_L1_R2.fastq.gz']
         }
     }
     test("trimming single-end lane writes a trimmed FASTQ") {
