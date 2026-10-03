@@ -1,0 +1,48 @@
+{
+  "form": {
+    "type": "object",
+    "properties": {
+      "output_fmt": {
+        "title": "Output Format",
+        "description": "Format of the published recalibrated alignment. CRAM is smaller; it is written against the GATK.GRCh38 reference the alignment used.",
+        "type": "string",
+        "enum": ["cram", "bam"],
+        "default": "cram"
+      },
+      "quantization": {
+        "title": "Quality-Score Quantization",
+        "type": "object",
+        "properties": {
+          "quantize_quals_enabled": {
+            "title": "Quantize Quality Scores",
+            "description": "Replicate GATK ApplyBQSR static quantization after Parabricks applybqsr. Only the quantized file is published. Turn off to publish the unquantized recalibrated file instead.",
+            "type": "boolean",
+            "default": true
+          },
+          "static_quantized_quals": {
+            "title": "Static Quantization Bins",
+            "description": "Comma-separated Phred values (GATK --static-quantized-quals).",
+            "type": "string",
+            "default": "10,20,30",
+            "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"
+          },
+          "preserve_qscores_less_than": {
+            "title": "Preserve Quality Scores Below",
+            "description": "Quality scores below this value remain unchanged (GATK --preserve-qscores-less-than). Must be below the smallest bin.",
+            "type": "integer",
+            "default": 6,
+            "minimum": 0,
+            "maximum": 93
+          },
+          "round_down_quantized": {
+            "title": "Round Down",
+            "description": "Round each score down to the largest bin at or below it, instead of the nearest bin in probability space (GATK --round-down-quantized).",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    }
+  },
+  "ui": {}
+}

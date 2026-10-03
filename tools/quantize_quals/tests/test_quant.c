@@ -51,7 +51,7 @@ static void test_missing_qual_passthrough(void) {
     CHECK(m[QQ_MISSING_QUAL] == QQ_MISSING_QUAL, "0xff mapped to %d", m[QQ_MISSING_QUAL]);
 
     uint8_t missing[4] = {0xff, 0xff, 0xff, 0xff};
-    qq_apply(m, missing, 4);
+    qq_apply(m, missing, 4, NULL);
     for (int i = 0; i < 4; i++) CHECK(missing[i] == 0xff, "missing qual altered at %d", i);
 }
 
@@ -72,8 +72,38 @@ static void test_apply(void) {
     qq_build_mapping(6, bins, 3, 0, m, err, sizeof err);
     uint8_t q[] = {2, 7, 8, 13, 23, 41};
     const uint8_t want[] = {2, 6, 10, 20, 30, 30};
-    qq_apply(m, q, sizeof q);
+    uint64_t counts[256] = {0};
+    qq_apply(m, q, sizeof q, counts);
     CHECK(memcmp(q, want, sizeof q) == 0, "qq_apply produced wrong values");
+    CHECK(counts[2] == 1 && counts[7] == 1 && counts[41] == 1 && counts[30] == 0,
+          "counts must record input values: c2=%llu c7=%llu c41=%llu c30=%llu",
+          (unsigned long long)counts[2], (unsigned long long)counts[7],
+          (unsigned long long)counts[41], (unsigned long long)counts[30]);
+
+    uint8_t missing[3] = {0xff, 0xff, 0xff};
+    qq_apply(m, missing, 3, counts);
+    CHECK(counts[0xff] == 0, "missing qualities must not be counted");
+}
+
+static void test_describe_mapping(void) {
+    const int bins[] = {10, 20, 30};
+    uint8_t m[256];
+    char err[256], desc[512];
+
+    qq_build_mapping(6, bins, 3, 0, m, err, sizeof err);
+    CHECK(qq_describe_mapping(m, 6, desc, sizeof desc) == 0, "describe failed");
+    CHECK(strcmp(desc, "6-7->6 8-12->10 13-22->20 23+->30") == 0, "nearest description: '%s'", desc);
+
+    qq_build_mapping(6, bins, 3, 1, m, err, sizeof err);
+    qq_describe_mapping(m, 6, desc, sizeof desc);
+    CHECK(strcmp(desc, "6-9->6 10-19->10 20-29->20 30+->30") == 0, "round-down description: '%s'", desc);
+
+    const int one[] = {20};
+    qq_build_mapping(0, one, 1, 1, m, err, sizeof err);
+    qq_describe_mapping(m, 0, desc, sizeof desc);
+    CHECK(strcmp(desc, "0-19->0 20+->20") == 0, "single-bin description: '%s'", desc);
+
+    CHECK(qq_describe_mapping(m, 0, desc, 4) == -1, "a too-small buffer must be reported");
 }
 
 static void test_validation(void) {
@@ -104,6 +134,7 @@ int main(void) {
     test_missing_qual_passthrough();
     test_unsorted_duplicate_bins();
     test_apply();
+    test_describe_mapping();
     test_validation();
     if (failures) {
         fprintf(stderr, "%d check(s) failed\n", failures);

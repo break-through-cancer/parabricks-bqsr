@@ -80,7 +80,34 @@ int qq_build_mapping(int preserve_less_than, const int *bins, size_t n_bins,
     return 0;
 }
 
-void qq_apply(const uint8_t mapping[256], uint8_t *qual, size_t len) {
+void qq_apply(const uint8_t mapping[256], uint8_t *qual, size_t len, uint64_t counts[256]) {
     if (len == 0 || qual[0] == QQ_MISSING_QUAL) return;
-    for (size_t i = 0; i < len; i++) qual[i] = mapping[qual[i]];
+    if (counts) {
+        for (size_t i = 0; i < len; i++) {
+            counts[qual[i]]++;
+            qual[i] = mapping[qual[i]];
+        }
+    } else {
+        for (size_t i = 0; i < len; i++) qual[i] = mapping[qual[i]];
+    }
+}
+
+int qq_describe_mapping(const uint8_t mapping[256], int preserve_less_than, char *buf, size_t buf_len) {
+    size_t used = 0;
+    buf[0] = '\0';
+    int start = preserve_less_than;
+    for (int q = preserve_less_than; q <= QQ_MAX_PHRED; q++) {
+        if (q < QQ_MAX_PHRED && mapping[q + 1] == mapping[start]) continue;
+        int n;
+        if (q == QQ_MAX_PHRED)
+            n = snprintf(buf + used, buf_len - used, "%s%d+->%d", used ? " " : "", start, mapping[start]);
+        else if (q == start)
+            n = snprintf(buf + used, buf_len - used, "%s%d->%d", used ? " " : "", start, mapping[start]);
+        else
+            n = snprintf(buf + used, buf_len - used, "%s%d-%d->%d", used ? " " : "", start, q, mapping[start]);
+        if (n < 0 || (size_t)n >= buf_len - used) return -1;
+        used += (size_t)n;
+        start = q + 1;
+    }
+    return 0;
 }

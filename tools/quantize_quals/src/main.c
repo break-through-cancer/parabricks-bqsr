@@ -1,8 +1,12 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <htslib/hts.h>
 #include <htslib/kstring.h>
@@ -11,14 +15,14 @@
 
 #include "quant.h"
 
-#define QQ_VERSION "0.1.0"
+#define QQ_VERSION "0.1.1"
 #define QQ_MAX_BINS 256
 
 static const char *usage =
     "Usage: quantize_quals --in <sam|bam|cram> --out <bam|cram|sam> [--ref <fasta>]\n"
     "                      --static-quantized-quals <Q> [<Q> ...]\n"
     "                      [--preserve-qscores-less-than <Q>] [--round-down-quantized]\n"
-    "                      [--threads <N>]\n"
+    "                      [--threads <N>] [--progress-every <N>]\n"
     "\n"
     "Replicates GATK ApplyBQSR static quality-score quantization on an already\n"
     "recalibrated alignment file. Only per-base QUAL values are changed.\n"
@@ -34,6 +38,8 @@ static const char *usage =
     "  --round-down-quantized             Round down to the largest bin <= Q instead of\n"
     "                                     the nearest bin in probability space.\n"
     "  --threads <N>                      BGZF/CRAM worker threads (default: 1).\n"
+    "  --progress-every <N>               Log progress every N records to stderr\n"
+    "                                     (default: 10000000; 0 disables).\n"
     "  --help, --version\n";
 
 typedef struct {
@@ -43,6 +49,7 @@ typedef struct {
     int preserve;
     int round_down;
     int threads;
+    long long progress_every;
 } opts_t;
 
 static int die(const char *fmt, const char *arg) {
@@ -50,6 +57,22 @@ static int die(const char *fmt, const char *arg) {
     fprintf(stderr, fmt, arg);
     fputc('\n', stderr);
     return 1;
+}
+
+static void qq_log(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    fputs("quantize_quals: ", stderr);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    fflush(stderr);
+    va_end(ap);
+}
+
+static double now_seconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
 static int parse_int(const char *s, int *out) {
@@ -71,7 +94,8 @@ static int parse_args(int argc, char **argv, opts_t *o) {
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         int needs_value = !strcmp(a, "--in") || !strcmp(a, "--out") || !strcmp(a, "--ref") ||
-                          !strcmp(a, "--threads") || !strcmp(a, "--preserve-qscores-less-than");
+                          !strcmp(a, "--threads") || !strcmp(a, "--preserve-qscores-less-than") ||
+                          !strcmp(a, "--progress-every");
         if (needs_value && (i + 1 >= argc || !strncmp(argv[i + 1], "--", 2)))
             return die("%s requires a value", a);
 
@@ -90,6 +114,12 @@ static int parse_args(int argc, char **argv, opts_t *o) {
         } else if (!strcmp(a, "--threads")) {
             if (parse_int(argv[++i], &o->threads) || o->threads < 1)
                 return die("--threads must be a positive integer, got '%s'", argv[i]);
+        } else if (!strcmp(a, "--progress-every")) {
+            char *end;
+            errno = 0;
+            o->progress_every = strtoll(argv[++i], &end, 10);
+            if (errno || end == argv[i] || *end != '\0' || o->progress_every < 0)
+                return die("--progress-every must be a non-negative integer, got '%s'", argv[i]);
         } else if (!strcmp(a, "--preserve-qscores-less-than")) {
             if (parse_int(argv[++i], &o->preserve))
                 return die("--preserve-qscores-less-than value '%s' is not an integer", argv[i]);
@@ -124,6 +154,35 @@ static char *command_line(int argc, char **argv) {
     return ks_release(&ks);
 }
 
+static int cmp_int(const void *a, const void *b) {
+    int x = *(const int *)a, y = *(const int *)b;
+    return (x > y) - (x < y);
+}
+
+static void log_settings(const opts_t *o, const uint8_t mapping[256]) {
+    int bins[QQ_MAX_BINS];
+    memcpy(bins, o->bins, o->n_bins * sizeof *bins);
+    qsort(bins, o->n_bins, sizeof *bins, cmp_int);
+    kstring_t ks = KS_INITIALIZE;
+    for (size_t i = 0; i < o->n_bins; i++)
+        if (i == 0 || bins[i] != bins[i - 1]) ksprintf(&ks, "%s%d", ks.l ? "," : "", bins[i]);
+    qq_log("mode: %s; preserve Q<%d; bins %s; threads %d",
+           o->round_down ? "round down to the largest bin <= Q" : "nearest bin in probability space",
+           o->preserve, ks_str(&ks), o->threads);
+    ks_free(&ks);
+
+    char desc[2048];
+    if (qq_describe_mapping(mapping, o->preserve, desc, sizeof desc) == 0) qq_log("mapping: %s", desc);
+}
+
+static void log_distribution(const char *label, const uint64_t counts[256], uint64_t total) {
+    kstring_t ks = KS_INITIALIZE;
+    for (int q = 0; q < QQ_MISSING_QUAL; q++)
+        if (counts[q]) ksprintf(&ks, "%sQ%d:%.1f%%", ks.l ? " " : "", q, 100.0 * counts[q] / total);
+    qq_log("%s qualities: %s", label, ks_str(&ks));
+    ks_free(&ks);
+}
+
 static int is_coordinate_sorted(sam_hdr_t *hdr) {
     kstring_t so = KS_INITIALIZE;
     int sorted = sam_hdr_find_tag_hd(hdr, "SO", &so) == 0 && !strcmp(ks_str(&so), "coordinate");
@@ -132,7 +191,7 @@ static int is_coordinate_sorted(sam_hdr_t *hdr) {
 }
 
 int main(int argc, char **argv) {
-    opts_t o = { .preserve = 6, .threads = 1 };
+    opts_t o = { .preserve = 6, .threads = 1, .progress_every = 10000000 };
     if (argc == 1) {
         fputs(usage, stderr);
         return 1;
@@ -143,6 +202,11 @@ int main(int argc, char **argv) {
     char err[512];
     if (qq_build_mapping(o.preserve, o.bins, o.n_bins, o.round_down, mapping, err, sizeof err))
         return die("%s", err);
+
+    double start = now_seconds();
+    fprintf(stderr, "quantize_quals %s (htslib %s)\n", QQ_VERSION, hts_version());
+    qq_log("input: %s", o.in);
+    log_settings(&o, mapping);
 
     const char *mode;
     const char *idx_ext = NULL;
@@ -175,6 +239,8 @@ int main(int argc, char **argv) {
     char *cl = NULL;
     char *idx_fn = NULL;
     hts_tpool *pool = NULL;
+    uint64_t n_records = 0, n_without_quals = 0, n_quals = 0;
+    uint64_t counts[256] = {0};
 
     if (o.threads > 1) {
         pool = hts_tpool_init(o.threads);
@@ -219,8 +285,10 @@ int main(int argc, char **argv) {
         goto done;
     }
 
+    int indexed = 0;
     if (idx_ext) {
         if (is_coordinate_sorted(hdr)) {
+            indexed = 1;
             idx_fn = malloc(strlen(o.out) + strlen(idx_ext) + 1);
             strcpy(idx_fn, o.out);
             strcat(idx_fn, idx_ext);
@@ -234,10 +302,27 @@ int main(int argc, char **argv) {
         }
     }
 
+    qq_log("output: %s (%s%s%s%s)", o.out, out_is_cram ? "CRAM" : idx_ext ? "BAM" : "SAM",
+           idx_ext ? (indexed ? ", indexed" : ", not indexed") : "",
+           out_is_cram ? ", reference " : "", out_is_cram ? o.ref : "");
+
     b = bam_init1();
     int r;
     while ((r = sam_read1(in, hdr, b)) >= 0) {
-        qq_apply(mapping, bam_get_qual(b), (size_t)b->core.l_qseq);
+        uint8_t *qual = bam_get_qual(b);
+        n_records++;
+        if (b->core.l_qseq == 0 || qual[0] == QQ_MISSING_QUAL) n_without_quals++;
+        else n_quals += (uint64_t)b->core.l_qseq;
+        qq_apply(mapping, qual, (size_t)b->core.l_qseq, counts);
+        if (o.progress_every && n_records % (uint64_t)o.progress_every == 0) {
+            double elapsed = now_seconds() - start;
+            kstring_t at = KS_INITIALIZE;
+            if (b->core.tid >= 0) ksprintf(&at, "%s:%lld", sam_hdr_tid2name(hdr, b->core.tid), (long long)b->core.pos + 1);
+            else kputc('*', &at);
+            qq_log("progress: %llu records, at %s, %.1f s, %.0f records/s", (unsigned long long)n_records,
+                   ks_str(&at), elapsed, elapsed > 0 ? n_records / elapsed : 0.0);
+            ks_free(&at);
+        }
         if (sam_write1(out, hdr, b) < 0) {
             die("failed writing a record to '%s'", o.out);
             goto done;
@@ -259,6 +344,20 @@ done:
     if (in && sam_close(in) < 0 && rc == 0) rc = die("failed closing input '%s'", o.in);
     if (hdr) sam_hdr_destroy(hdr);
     if (pool) hts_tpool_destroy(pool);
+    if (rc == 0) {
+        uint64_t changed = 0, out_counts[256] = {0};
+        for (int q = 0; q < QQ_MISSING_QUAL; q++) {
+            if (mapping[q] != q) changed += counts[q];
+            out_counts[mapping[q]] += counts[q];
+        }
+        qq_log("done: %llu records (%llu without qualities), %llu qualities, %llu changed (%.1f%%) in %.1f s",
+               (unsigned long long)n_records, (unsigned long long)n_without_quals, (unsigned long long)n_quals,
+               (unsigned long long)changed, n_quals ? 100.0 * changed / n_quals : 0.0, now_seconds() - start);
+        if (n_quals) {
+            log_distribution("input", counts, n_quals);
+            log_distribution("output", out_counts, n_quals);
+        }
+    }
     free(cl);
     free(idx_fn);
     return rc;
