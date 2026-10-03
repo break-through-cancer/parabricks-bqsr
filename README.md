@@ -27,6 +27,8 @@ QC: samtools stats, mosdepth, read-count checks, MultiQC
 
 ## Usage
 
+Requires Nextflow 26.04.0 or later.
+
 ```bash
 nextflow run main.nf --input fastq_samplesheet.csv
 nextflow run main.nf --input alignment_samplesheet.csv --quantize_quals_enabled false --output_fmt bam
@@ -135,6 +137,10 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
 | `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
+Parameters are declared in `nextflow_schema.json` (nf-schema); the startup log prints the
+parameters that differ from their defaults, as nf-core pipelines do. A new parameter must be
+added to both `nextflow.config` and the schema; `tests/config` checks they match.
+
 Quality filtering in fastp is always disabled (BQSR handles base qualities); with
 trimming on, `--length_required` is the only filter that removes reads.
 
@@ -207,7 +213,7 @@ distance and alignment GPUs.
 
 **Registration settings:** repository `break-through-cancer/parabricks-bqsr`, entry
 script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
-`25.10.4` or later (stub runs verified on 25.10.4 and 26.04.x). A registration created
+`26.04.0` or later (required; nf-schema 2.8.0 needs it). A registration created
 before `.cirro/alignment/` existed must be re-pointed to that directory. Output file
 mapping can reuse `sarek_align`'s patterns:
 - `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`

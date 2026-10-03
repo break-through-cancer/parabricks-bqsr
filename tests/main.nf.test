@@ -55,6 +55,29 @@ nextflow_pipeline {
         }
     }
 
+    test("startup log lists only parameters that differ from their defaults") {
+        when {
+            params {
+                input                  = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome                 = 'null'
+                ref_fasta              = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai          = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = false
+                output_fmt             = 'bam'
+            }
+        }
+        then {
+            assert workflow.success
+            def log = file("${outputDir}/../meta/nextflow.log").text.replaceAll(/\u001B\[[0-9;]*m/, '')
+            assert log.contains('Only displaying parameters that differ from the pipeline defaults')
+            assert log =~ /output_fmt\s*: bam/
+            assert log =~ /quantize_quals_enabled\s*: false/
+            assert !(log =~ /static_quantized_quals\s*:/)
+            assert !(log =~ /seq_platform\s*:/)
+        }
+    }
+
     test("missing --input fails naming the parameter") {
         when {
             params {

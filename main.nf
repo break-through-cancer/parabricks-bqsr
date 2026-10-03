@@ -13,8 +13,10 @@ include { SAMTOOLS_FINALIZE                         } from './modules/local/samt
 include { SAMTOOLS_STATS                            } from './modules/local/samtools_stats'
 include { MOSDEPTH                                  } from './modules/local/mosdepth'
 include { MULTIQC                                   } from './modules/local/multiqc'
+include { paramsSummaryLog                          } from 'plugin/nf-schema'
 
 workflow {
+    log.info paramsSummaryLog(workflow)
     validateParams()
     def entry = samplesheetEntry(params.input)
     def refs = resolveReferences(params)
