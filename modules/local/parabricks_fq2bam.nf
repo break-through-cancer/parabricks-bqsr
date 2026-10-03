@@ -27,6 +27,11 @@ process PARABRICKS_FQ2BAM {
     ])
     """
     set -euo pipefail
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        echo "GPU: \$(nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader | paste -sd ';' -)" >&2
+    else
+        echo "GPU: nvidia-smi not available" >&2
+    fi
     INDEX=\$(find -L ${bwa_index}/ -name '*.amb' | sed 's/\\.amb\$//')
     cp -L ${fasta} "\$INDEX"
     cp -L ${fai} "\$INDEX.fai"
