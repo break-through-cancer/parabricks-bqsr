@@ -13,3 +13,9 @@ tools/quantize_quals/build/
 # Python
 __pycache__/
 .pytest_cache/
+
+# Local design notes and Claude working files (not published)
+docs/
+SPEC.md
+CLAUDE.md
+.claude/

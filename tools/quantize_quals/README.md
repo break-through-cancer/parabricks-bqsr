@@ -2,7 +2,7 @@
 
 C/HTSlib tool that replicates GATK `ApplyBQSR --static-quantized-quals` on an already
 recalibrated BAM/CRAM (Parabricks `applybqsr` has no quantization step). Only per-base
-`QUAL` values change. See `SPEC.md` §4 for the algorithm and worked examples.
+`QUAL` values change.
 
 ```bash
 quantize_quals --in in.bam --out out.cram --ref ref.fa \
@@ -11,6 +11,33 @@ quantize_quals --in in.bam --out out.cram --ref ref.fa \
 
 Coordinate-sorted BAM/CRAM output is indexed alongside (`out.bam.bai` / `out.cram.crai`).
 Records without qualities (`QUAL = *`) pass through unchanged. An `@PG` line is added.
+
+## Algorithm
+
+A 256-entry lookup table is built once at startup; each base quality is then replaced by
+`mapping[q]`.
+
+- `q < --preserve-qscores-less-than`: unchanged.
+- Otherwise the boundaries are the threshold plus the sorted, de-duplicated
+  `--static-quantized-quals` values.
+- Default: the boundary nearest to `q` in probability space, comparing
+  `Pcorrect(Q) = 1 - 10^(-Q/10)`, not raw Phred values.
+- `--round-down-quantized`: the largest boundary `<= q`.
+- Values above the largest bin map to the largest bin. `QUAL = *` is left alone.
+
+With `--preserve-qscores-less-than 6 --static-quantized-quals 10 20 30`
+(boundaries 6, 10, 20, 30):
+
+| Input Q | Default (nearest) | `--round-down-quantized` |
+| --- | --- | --- |
+| 0-5 | unchanged | unchanged |
+| 6-7 | 6 | 6 |
+| 8-9 | 10 | 6 |
+| 10-12 | 10 | 10 |
+| 13-19 | 20 | 10 |
+| 20-22 | 20 | 20 |
+| 23-29 | 30 | 20 |
+| 30+ | 30 | 30 |
 
 ## Log output
 
