@@ -1,0 +1,2 @@
+sample,lane,fastq_1,fastq_2
+S3,1,tests/fixtures/fastq/S3_sra.fastq.gz,
