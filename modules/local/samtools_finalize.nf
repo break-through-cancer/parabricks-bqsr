@@ -10,7 +10,7 @@ process SAMTOOLS_FINALIZE {
     val output_fmt
 
     output:
-    tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.{bai,crai}"), emit: alignment
+    tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.${output_fmt == 'cram' ? 'crai' : 'bai'}"), emit: alignment
 
     script:
     def out = "${meta.sample}.${meta.suffix}.${output_fmt}"

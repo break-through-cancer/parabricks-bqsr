@@ -10,7 +10,7 @@ process QUANTIZE_QUALS {
     val output_fmt
 
     output:
-    tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.{bai,crai}"), emit: alignment
+    tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.${output_fmt == 'cram' ? 'crai' : 'bai'}"), emit: alignment
     path "${meta.sample}.quantize.log", emit: log
     path "${meta.sample}.quantize_mqc.tsv", emit: mqc
 
