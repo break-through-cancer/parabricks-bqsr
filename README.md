@@ -3,7 +3,7 @@
 Standalone Nextflow pipeline that applies a `sarek_align` BQSR recalibration table
 genome-wide with NVIDIA Parabricks `applybqsr`. It can also replicate GATK `ApplyBQSR`'s
 static quality-score quantization (`--static-quantized-quals`), a step Parabricks does not
-provide. See `SPEC.md` for the full design.
+provide.
 
 ```
 samplesheet ─▶ SAMPLESHEET_TO_SAMPLES ─▶ PARABRICKS_APPLYBQSR (no intervals, BAM)
@@ -127,10 +127,13 @@ python -m pytest .cirro
    request co-existing with Cirro's own GPU compute config, `stageInMode 'copy'`
    (inherited from the nf-core Parabricks modules; `--preserve-file-symlinks` may remove
    the copy) and CPU/memory sizing.
-3. **GATK parity (`SPEC.md` §4.5) is not yet checked.** This check requires a real pre-BQSR
-   BAM, its recalibration table and a GATK install. The quantizer is verified only
-   against the spec's documented mapping tables.
-4. **`SAMTOOLS_FINALIZE` is an addition to `SPEC.md` §2.** The pipeline assumes
+3. **GATK parity is not yet checked.** The reference path is GATK `ApplyBQSR
+   --static-quantized-quals 10 20 30 --preserve-qscores-less-than 6`; the test path is
+   Parabricks `applybqsr` followed by `quantize_quals` with the same settings, on the same
+   pre-BQSR BAM and table. Records should match exactly. This needs a GATK install and
+   real data; the quantizer is so far verified against its documented mapping tables
+   only.
+4. **`SAMTOOLS_FINALIZE` exists because of a Parabricks limitation.** The pipeline assumes
    `applybqsr` writes BAM only: NVIDIA documents its `--out-bam` as "Output BAM file",
    while `fq2bam` documents "Path of a BAM/CRAM file". With quantization off, this step
    indexes the BAM or converts it to indexed CRAM. With quantization on,
