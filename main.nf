@@ -90,7 +90,13 @@ workflow {
     }
 
     SAMTOOLS_STATS(final_ch, ref_ch)
-    MOSDEPTH(final_ch, ref_ch)
+    if (params.output_fmt == 'cram' && params.cram_version == '3.1') {
+        log.warn "mosdepth cannot read CRAM 3.1: coverage QC is skipped (use --cram_version 3.0 to keep it)"
+        mosdepth_reports = Channel.empty()
+    } else {
+        MOSDEPTH(final_ch, ref_ch)
+        mosdepth_reports = MOSDEPTH.out.reports.flatMap { it[1] }
+    }
     READ_CHECKS(
         SAMTOOLS_STATS.out.stats.map { meta, s -> [[sample: meta.sample], s] },
         before_idxstats.map { meta, idx -> [[sample: meta.sample], idx] },
@@ -99,7 +105,7 @@ workflow {
     MULTIQC(
         extra_qc
             .mix(SAMTOOLS_STATS.out.stats.map { it[1] })
-            .mix(MOSDEPTH.out.reports.flatMap { it[1] })
+            .mix(mosdepth_reports)
             .mix(quant_mqc)
             .mix(READ_CHECKS.out.mqc)
             .collect()
@@ -110,6 +116,7 @@ def validateParams() {
     if (!params.input) error "Missing required parameter: input (path to samplesheet CSV). See README.md and assets/samplesheet.csv."
     if (!(params.output_fmt in ['bam', 'cram'])) error "Invalid output_fmt '${params.output_fmt}': must be 'bam' or 'cram'"
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
+    if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"
     if (!params.fq2bam_gpus.toString().isInteger() || params.fq2bam_gpus.toString().toInteger() < 1) error "Invalid fq2bam_gpus '${params.fq2bam_gpus}': must be a positive integer"
     if (params.quantize_quals_enabled.toString() == 'true') {

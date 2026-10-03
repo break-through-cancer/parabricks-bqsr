@@ -13,7 +13,14 @@ process MOSDEPTH {
 
     script:
     """
+    set -euo pipefail
     mosdepth --fast-mode --no-per-base -t ${task.cpus} --fasta ${ref_fasta} ${meta.sample} ${alignment}
+    expected=\$(awk '{ s += \$2 } END { print s }' ${ref_fasta_fai})
+    covered=\$(awk '\$1 == "total" { print \$2 }' ${meta.sample}.mosdepth.summary.txt)
+    if [ "\$covered" != "\$expected" ]; then
+        echo "mosdepth covered \${covered:-0} of \$expected reference bases in ${alignment}: it could not read the file (an unsupported CRAM version?)" >&2
+        exit 1
+    fi
     """
 
     stub:

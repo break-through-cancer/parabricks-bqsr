@@ -15,14 +15,14 @@
 
 #include "quant.h"
 
-#define QQ_VERSION "0.1.1"
+#define QQ_VERSION "0.1.2"
 #define QQ_MAX_BINS 256
 
 static const char *usage =
     "Usage: quantize_quals --in <sam|bam|cram> --out <bam|cram|sam> [--ref <fasta>]\n"
     "                      --static-quantized-quals <Q> [<Q> ...]\n"
     "                      [--preserve-qscores-less-than <Q>] [--round-down-quantized]\n"
-    "                      [--threads <N>] [--progress-every <N>]\n"
+    "                      [--threads <N>] [--progress-every <N>] [--cram-version <3.0|3.1>]\n"
     "\n"
     "Replicates GATK ApplyBQSR static quality-score quantization on an already\n"
     "recalibrated alignment file. Only per-base QUAL values are changed.\n"
@@ -38,6 +38,8 @@ static const char *usage =
     "  --round-down-quantized             Round down to the largest bin <= Q instead of\n"
     "                                     the nearest bin in probability space.\n"
     "  --threads <N>                      BGZF/CRAM worker threads (default: 1).\n"
+    "  --cram-version <3.0|3.1>           CRAM output version (default: 3.0, the most widely\n"
+    "                                     readable; ignored for BAM/SAM output).\n"
     "  --progress-every <N>               Log progress every N records to stderr\n"
     "                                     (default: 10000000; 0 disables).\n"
     "  --help, --version\n";
@@ -50,6 +52,7 @@ typedef struct {
     int round_down;
     int threads;
     long long progress_every;
+    const char *cram_version;
 } opts_t;
 
 static int die(const char *fmt, const char *arg) {
@@ -95,7 +98,7 @@ static int parse_args(int argc, char **argv, opts_t *o) {
         const char *a = argv[i];
         int needs_value = !strcmp(a, "--in") || !strcmp(a, "--out") || !strcmp(a, "--ref") ||
                           !strcmp(a, "--threads") || !strcmp(a, "--preserve-qscores-less-than") ||
-                          !strcmp(a, "--progress-every");
+                          !strcmp(a, "--progress-every") || !strcmp(a, "--cram-version");
         if (needs_value && (i + 1 >= argc || !strncmp(argv[i + 1], "--", 2)))
             return die("%s requires a value", a);
 
@@ -114,6 +117,10 @@ static int parse_args(int argc, char **argv, opts_t *o) {
         } else if (!strcmp(a, "--threads")) {
             if (parse_int(argv[++i], &o->threads) || o->threads < 1)
                 return die("--threads must be a positive integer, got '%s'", argv[i]);
+        } else if (!strcmp(a, "--cram-version")) {
+            o->cram_version = argv[++i];
+            if (strcmp(o->cram_version, "3.0") && strcmp(o->cram_version, "3.1"))
+                return die("--cram-version must be 3.0 or 3.1, got '%s'", o->cram_version);
         } else if (!strcmp(a, "--progress-every")) {
             char *end;
             errno = 0;
@@ -191,7 +198,7 @@ static int is_coordinate_sorted(sam_hdr_t *hdr) {
 }
 
 int main(int argc, char **argv) {
-    opts_t o = { .preserve = 6, .threads = 1, .progress_every = 10000000 };
+    opts_t o = { .preserve = 6, .threads = 1, .progress_every = 10000000, .cram_version = "3.0" };
     if (argc == 1) {
         fputs(usage, stderr);
         return 1;
@@ -272,6 +279,10 @@ int main(int argc, char **argv) {
         die("cannot open output '%s'", o.out);
         goto done;
     }
+    if (out_is_cram && hts_set_opt(out, CRAM_OPT_VERSION, o.cram_version) < 0) {
+        die("cannot set CRAM version %s", o.cram_version);
+        goto done;
+    }
     if (pool) {
         htsThreadPool tp = { pool, 0 };
         hts_set_opt(out, HTS_OPT_THREAD_POOL, &tp);
@@ -302,7 +313,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    qq_log("output: %s (%s%s%s%s)", o.out, out_is_cram ? "CRAM" : idx_ext ? "BAM" : "SAM",
+    qq_log("output: %s (%s%s%s%s%s)", o.out, out_is_cram ? "CRAM " : idx_ext ? "BAM" : "SAM", out_is_cram ? o.cram_version : "",
            idx_ext ? (indexed ? ", indexed" : ", not indexed") : "",
            out_is_cram ? ", reference " : "", out_is_cram ? o.ref : "");
 

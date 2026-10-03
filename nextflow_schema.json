@@ -175,6 +175,15 @@
                         "cram"
                     ]
                 },
+                "cram_version": {
+                    "type": "string",
+                    "description": "CRAM version for CRAM output. 3.0 is readable by essentially all tools; 3.1 is smaller but older HTSlib builds (e.g. the mosdepth container) and htsjdk-based tools may not read it; mosdepth is skipped for 3.1.",
+                    "default": "3.0",
+                    "enum": [
+                        "3.0",
+                        "3.1"
+                    ]
+                },
                 "quantize_quals_enabled": {
                     "type": "boolean",
                     "description": "Quantize quality scores; false publishes unquantized output.",
@@ -183,7 +192,7 @@
                 "quantize_quals_container": {
                     "type": "string",
                     "description": "Quantizer container image.",
-                    "default": "ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1"
+                    "default": "ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2"
                 },
                 "static_quantized_quals": {
                     "type": "string",

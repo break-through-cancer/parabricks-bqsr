@@ -51,7 +51,7 @@ nextflow_process {
         }
     }
 
-    test("md CRAM input with CRAM output links instead of overwriting its input") {
+    test("md CRAM 3.1 input with default CRAM 3.0 output is re-encoded, not overwritten") {
         when { process { """
             input[0] = [[sample: 'TEST_SAMPLE', suffix: 'md'], file("\${projectDir}/tests/fixtures/modules/sample.cram")]
             input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
@@ -62,6 +62,7 @@ nextflow_process {
             def (meta, out, idx) = process.out.alignment[0]
             assert file(out).name == 'TEST_SAMPLE.md.cram' && file(idx).name == 'TEST_SAMPLE.md.cram.crai'
             assert cram(out, "${projectDir}/tests/fixtures/modules/reference.fasta").getSamLines().size() == 11
+            assert file(out).bytes[5] == 0
         }
     }
     test("md CRAM input with BAM output converts") {
@@ -74,6 +75,22 @@ nextflow_process {
             assert process.success
             assert file(process.out.alignment[0][1]).name == 'TEST_SAMPLE.md.bam'
             assert bam(process.out.alignment[0][1].toString()).getFileType() == 'BAM'
+        }
+    }
+
+    test("md CRAM 3.1 input with cram_version 3.1 is linked unchanged") {
+        when {
+            params { cram_version = '3.1' }
+            process { """
+                input[0] = [[sample: 'TEST_SAMPLE', suffix: 'md'], file("\${projectDir}/tests/fixtures/modules/sample.cram")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+                input[2] = 'cram'
+            """ }
+        }
+        then {
+            assert process.success
+            def out = process.out.alignment[0][1]
+            assert file(out).bytes == file("${projectDir}/tests/fixtures/modules/sample.cram").bytes
         }
     }
 }

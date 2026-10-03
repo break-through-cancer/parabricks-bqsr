@@ -4,6 +4,7 @@
   "genome": "GATK.GRCh38",
   "igenomes_base": "$.referencesBucketUri|/igenomes/",
   "output_fmt": "$.dataset.params.output_fmt",
+  "cram_version": "$.dataset.params.cram_version",
   "quantize_quals_enabled": "$.dataset.params.quantization.quantize_quals_enabled",
   "static_quantized_quals": "$.dataset.params.quantization.static_quantized_quals",
   "preserve_qscores_less_than": "$.dataset.params.quantization.preserve_qscores_less_than",

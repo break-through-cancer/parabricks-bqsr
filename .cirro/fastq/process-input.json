@@ -10,6 +10,7 @@
   "known_indels": "$.dataset.params.genome_selection.known_indels",
   "custom_intervals": "$.dataset.params.genome_selection.custom_intervals",
   "output_fmt": "$.dataset.params.output_fmt",
+  "cram_version": "$.dataset.params.cram_version",
   "quantize_quals_enabled": "$.dataset.params.quantization.quantize_quals_enabled",
   "static_quantized_quals": "$.dataset.params.quantization.static_quantized_quals",
   "preserve_qscores_less_than": "$.dataset.params.quantization.preserve_qscores_less_than",

@@ -45,11 +45,11 @@ Everything is written to stderr (stdout stays empty), so Nextflow captures it in
 task's `.command.log`:
 
 ```
-quantize_quals 0.1.1 (htslib 1.22.1)
+quantize_quals 0.1.2 (htslib 1.22.1)
 quantize_quals: input: input/S.recal.bam
 quantize_quals: mode: nearest bin in probability space; preserve Q<6; bins 10,20,30; threads 8
 quantize_quals: mapping: 6-7->6 8-12->10 13-22->20 23+->30
-quantize_quals: output: S.recal.cram (CRAM, indexed, reference Homo_sapiens_assembly38.fasta)
+quantize_quals: output: S.recal.cram (CRAM 3.0, indexed, reference Homo_sapiens_assembly38.fasta)
 quantize_quals: progress: 10000000 records, at chr1:23905377, 41.2 s, 242718 records/s
 ...
 quantize_quals: done: 812345678 records (1234 without qualities), 121851851700 qualities, 98765432100 changed (81.1%) in 3402.6 s
@@ -58,6 +58,7 @@ quantize_quals: output qualities: Q2:0.1% ... Q30:89.4%
 ```
 
 The values above are illustrative. `mapping` shows the exact lookup table applied.
+`--cram-version 3.0|3.1` selects the CRAM version (default 3.0, the most widely readable).
 `--progress-every N` sets the progress interval in records (default 10,000,000; `0`
 disables it).
 

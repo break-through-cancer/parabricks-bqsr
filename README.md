@@ -22,7 +22,7 @@ PARABRICKS_FQ2BAM (per sample, GPU:              │
       └─ no known sites ─▶ QUANTIZE_QUALS or SAMTOOLS_FINALIZE
                                └─▶ preprocessing/markduplicates/<s>/<s>.md.<cram|bam>
 
-QC: samtools stats, mosdepth, read-count checks, MultiQC
+QC: samtools stats, mosdepth (skipped for CRAM 3.1), read-count checks, MultiQC
 ```
 
 ## Usage
@@ -131,11 +131,12 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
 | `--fq2bam_gpus` | `1` | GPUs for alignment. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
+| `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
-| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1` | Quantizer image; see `tools/quantize_quals/README.md`. |
+| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
 Parameters are declared in `nextflow_schema.json` (nf-schema); the startup log prints the
 parameters that differ from their defaults, as nf-core pipelines do. A new parameter must be
@@ -185,7 +186,7 @@ pulls the quantizer image from GHCR; to test local changes to the tool, build an
 under the same name first:
 
 ```bash
-docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.1 tools/quantize_quals
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2 tools/quantize_quals
 ```
 
 Output content is decoded inside nf-test with the

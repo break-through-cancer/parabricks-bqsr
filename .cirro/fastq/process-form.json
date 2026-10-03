@@ -34,6 +34,7 @@
         }
       },
       "output_fmt": {"title": "Output Format", "type": "string", "enum": ["cram", "bam"], "default": "cram"},
+      "cram_version": {"title": "CRAM Version", "description": "3.0 is readable by essentially all tools. 3.1 is smaller, but some tools (including the coverage QC, which is then skipped) cannot read it.", "type": "string", "enum": ["3.0", "3.1"], "default": "3.0"},
       "quantization": {
         "title": "Quality-Score Quantization", "type": "object",
         "properties": {

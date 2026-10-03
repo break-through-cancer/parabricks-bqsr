@@ -15,16 +15,28 @@ process SAMTOOLS_FINALIZE {
     script:
     def out = "${meta.sample}.${meta.suffix}.${output_fmt}"
     def in_fmt = alignment.name.endsWith('.cram') ? 'cram' : 'bam'
-    if (in_fmt == output_fmt) {
+    def idx = output_fmt == 'cram' ? 'crai' : 'bai'
+    def convert = "samtools view -@ ${task.cpus} ${output_fmt == 'cram' ? "-C --output-fmt-option version=${params.cram_version}" : '-b'} -T ${ref_fasta} --write-index -o ${out}##idx##${out}.${idx} ${alignment}"
+    def link = "ln -s ${alignment} ${out} && samtools index -@ ${task.cpus} ${out}"
+    if (in_fmt != output_fmt) {
         """
         set -euo pipefail
-        ln -s ${alignment} ${out}
-        samtools index -@ ${task.cpus} ${out}
+        ${convert}
+        """
+    } else if (output_fmt == 'bam') {
+        """
+        set -euo pipefail
+        ${link}
         """
     } else {
         """
         set -euo pipefail
-        samtools view -@ ${task.cpus} ${output_fmt == 'cram' ? '-C' : '-b'} -T ${ref_fasta} --write-index -o ${out}##idx##${out}.${output_fmt == 'cram' ? 'crai' : 'bai'} ${alignment}
+        version=\$(head -c 6 ${alignment} | tail -c 2 | od -An -tu1 | tr -s ' ' | sed 's/^ //; s/ \$//; s/ /./')
+        if [ "\$version" = "${params.cram_version}" ]; then
+            ${link}
+        else
+            ${convert}
+        fi
         """
     }
 

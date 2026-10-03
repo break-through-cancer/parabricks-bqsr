@@ -13,4 +13,25 @@ nextflow_process {
             assert process.out.reports[0][1].collect { file(it).name }.sort() == ['S.mosdepth.global.dist.txt', 'S.mosdepth.summary.txt']
         }
     }
+
+    test("CRAM 3.0 is read and the whole reference is covered") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.v30.cram"), file("\$m/sample.v30.cram.crai")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then { assert process.success }
+    }
+
+    test("a CRAM mosdepth cannot decode (3.1) fails the task instead of reporting zero coverage") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.cram"), file("\$m/sample.cram.crai")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then {
+            assert process.failed
+            assert (process.stdout + process.stderr).join('\n').contains('mosdepth covered 0 of 500 reference bases')
+        }
+    }
 }
