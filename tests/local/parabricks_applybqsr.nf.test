@@ -27,6 +27,7 @@ nextflow_process {
             assert process.out[0].size() == 1
             assert process.out[0][0][0] == [ sample: 'TEST_SAMPLE' ]
             assert file(process.out[0][0][1]).name == 'TEST_SAMPLE.recal.bam'
+            assert file(process.out.idxstats[0][1]).name == 'TEST_SAMPLE.input.idxstats'
         }
     }
 
