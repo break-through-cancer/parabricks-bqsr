@@ -39,7 +39,7 @@ workflow {
             .groupTuple()
             .map { sample, counts -> [sample.toString(), counts.sum()] }
 
-        sample_reads = FASTP.out.reads
+        sample_reads = (trim ? FASTP.out.reads : SAMPLESHEET_TO_FASTQS.out.lanes)
             .map { meta, reads -> [groupKey(meta.sample, meta.n_lanes), meta, reads instanceof List ? reads : [reads]] }
             .groupTuple()
             .map { sample, metas, reads ->
