@@ -22,7 +22,8 @@ process PARABRICKS_FQ2BAM {
     script:
     def args = fq2bamArgs(meta, reads, vcfs, intervals, [
         optical_distance: params.optical_duplicate_pixel_distance, markdups_se_mode: params.markdups_se_mode,
-        cpus: task.cpus, memory_gb: task.memory.toGiga(), num_gpus: task.accelerator ? task.accelerator.request : 1
+        cpus: task.cpus, memory_gb: task.memory.toGiga(), num_gpus: task.accelerator ? task.accelerator.request : 1,
+        low_memory: params.fq2bam_low_memory, gpuwrite: params.fq2bam_gpuwrite
     ])
     """
     set -euo pipefail
@@ -30,7 +31,7 @@ process PARABRICKS_FQ2BAM {
     cp -L ${fasta} "\$INDEX"
     cp -L ${fai} "\$INDEX.fai"
     pbrun fq2bam --ref "\$INDEX" ${args}
-    samtools idxstats ${meta.sample}.md.cram > ${meta.sample}.fq2bam.idxstats
+    samtools idxstats -@ ${task.cpus} ${meta.sample}.md.cram > ${meta.sample}.fq2bam.idxstats
     """
 
     stub:
@@ -67,7 +68,10 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     a << "--bwa-options=\"-K 100000000 -Y${meta.status == 1 ? ' -B 3' : ''}\""
     a << "--bwa-cpu-thread-pool ${opts.cpus}"
     a << "--memory-limit ${Math.max(1, (opts.memory_gb as long).intdiv(2))}"
-    a += ['--gpuwrite', '--gpusort', '--low-memory', '--monitor-usage']
+    if (opts.gpuwrite) a << '--gpuwrite'
+    a << '--gpusort'
+    if (opts.low_memory) a << '--low-memory'
+    a << '--monitor-usage'
     if (meta.single_end && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
     a << "--num-gpus ${opts.num_gpus}"
     a << '--tmp-dir .'

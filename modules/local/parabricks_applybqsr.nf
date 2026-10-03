@@ -30,7 +30,7 @@ process PARABRICKS_APPLYBQSR {
         diff alignment.contigs reference.contigs | head -20 >&2 || true
         exit 1
     fi
-    samtools idxstats ${alignment} > ${meta.sample}.input.idxstats
+    samtools idxstats -@ ${task.cpus} ${alignment} > ${meta.sample}.input.idxstats
 
     pbrun applybqsr --ref ${ref_fasta} ${args}
     """

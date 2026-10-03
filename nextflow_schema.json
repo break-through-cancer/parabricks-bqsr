@@ -157,6 +157,16 @@
                     "description": "GPUs for fq2bam.",
                     "default": 1,
                     "minimum": 1
+                },
+                "fq2bam_low_memory": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Pass --low-memory to fq2bam: one BWA stream per GPU so alignment fits a 24 GB GPU (A10G/L4). Turning it off can speed alignment on GPUs with more memory, or fail on smaller ones."
+                },
+                "fq2bam_gpuwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Pass --gpuwrite to fq2bam: compress the output on a GPU. With a single GPU it shares the device with BQSR."
                 }
             }
         },

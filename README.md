@@ -130,6 +130,8 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--markdups_se_mode` | `5prime` | Single-end duplicate marking: `5prime` (standard) or `start-end` (adapter-trimmed short fragments such as cfDNA). |
 | `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
 | `--fq2bam_gpus` | `1` | GPUs for alignment. |
+| `--fq2bam_low_memory` | `true` | `--low-memory` for fq2bam (one BWA stream per GPU, fits a 24 GB GPU). Off can be faster on larger GPUs or fail on smaller ones. |
+| `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. With one GPU it shares the device with BQSR. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |

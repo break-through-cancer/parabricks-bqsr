@@ -9,7 +9,7 @@ nextflow_function {
             input[1] = ['reads/1/a1.fq.gz', 'reads/2/a2.fq.gz', 'reads/3/b1.fq.gz', 'reads/4/b2.fq.gz']
             input[2] = ['known_sites/1/x.vcf.gz', 'known_sites/2/y.vcf.gz']
             input[3] = 'i.bed'
-            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, num_gpus: 1]
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, num_gpus: 1, low_memory: true, gpuwrite: true]
         """ } }
         then {
             def a = function.result
@@ -30,7 +30,7 @@ nextflow_function {
             input[1] = 'reads/1/c.fq.gz'
             input[2] = 'known_sites/1/x.vcf.gz'
             input[3] = []
-            input[4] = [optical_distance: 2500, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 31, num_gpus: 2]
+            input[4] = [optical_distance: 2500, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 31, num_gpus: 2, low_memory: true, gpuwrite: true]
         """ } }
         then {
             def a = function.result
@@ -46,8 +46,34 @@ nextflow_function {
             input[1] = ['a.fq.gz', 'b.fq.gz']
             input[2] = []
             input[3] = []
-            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 4, memory_gb: 8, num_gpus: 1]
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 4, memory_gb: 8, num_gpus: 1, low_memory: true, gpuwrite: true]
         """ } }
         then { assert !function.result.contains('--knownSites') && !function.result.contains('--out-recal-file') }
+    }
+
+    test("low_memory and gpuwrite can each be turned off; gpusort stays") {
+        when { function { """
+            input[0] = [sample: 'S4', status: 0, single_end: false, read_groups: ['@RG\\\\tID:E']]
+            input[1] = ['a.fq.gz', 'b.fq.gz']
+            input[2] = []
+            input[3] = []
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: false]
+        """ } }
+        then {
+            def a = function.result
+            assert !a.contains('--low-memory') && !a.contains('--gpuwrite')
+            assert a.contains('--gpusort')
+        }
+    }
+
+    test("defaults keep sarek_align's low_memory and gpuwrite") {
+        when { function { """
+            input[0] = [sample: 'S5', status: 0, single_end: false, read_groups: ['@RG\\\\tID:F']]
+            input[1] = ['a.fq.gz', 'b.fq.gz']
+            input[2] = []
+            input[3] = []
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: true, gpuwrite: true]
+        """ } }
+        then { assert function.result.contains('--gpuwrite --gpusort --low-memory') }
     }
 }
