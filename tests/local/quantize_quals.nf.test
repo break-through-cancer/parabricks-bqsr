@@ -7,7 +7,7 @@ nextflow_process {
         when {
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -19,7 +19,7 @@ nextflow_process {
         then {
             assert process.success
             def (meta, bam_out, idx) = process.out[0][0]
-            assert meta == [ sample: 'TEST_SAMPLE' ]
+            assert meta == [ sample: 'TEST_SAMPLE', suffix: 'recal' ]
             assert file(bam_out).name == 'TEST_SAMPLE.recal.bam'
             assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
             assert bam(bam_out).getSamLines()*.trim() ==
@@ -35,7 +35,7 @@ nextflow_process {
             }
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.cram") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.cram") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -59,7 +59,7 @@ nextflow_process {
         when {
             process {
                 """
-                input[0] = [ [ sample: 'collide' ], file("\${projectDir}/tests/fixtures/modules/collide.recal.bam") ]
+                input[0] = [ [ sample: 'collide', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/collide.recal.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -81,7 +81,7 @@ nextflow_process {
             }
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -93,6 +93,20 @@ nextflow_process {
         then {
             assert process.failed
             assert (process.stdout + process.stderr).join('\n').contains('strictly below')
+        }
+    }
+
+    test("md suffix names the output .md and writes a MultiQC summary row") {
+        when { process { """
+            input[0] = [[sample: 'TEST_SAMPLE', suffix: 'md'], file("\${projectDir}/tests/fixtures/modules/sample.bam")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+            input[2] = 'bam'
+        """ } }
+        then {
+            assert process.success
+            assert file(process.out.alignment[0][1]).name == 'TEST_SAMPLE.md.bam'
+            def tsv = file(process.out.mqc[0]).text
+            assert tsv.contains('TEST_SAMPLE\t11\t365\t299\t81.9')
         }
     }
 }

@@ -5,33 +5,32 @@ process SAMTOOLS_FINALIZE {
     memory '8 GB'
 
     input:
-    tuple val(meta), path(bam)
+    tuple val(meta), path(alignment, stageAs: 'input/*')
     tuple path(ref_fasta), path(ref_fasta_fai)
     val output_fmt
 
     output:
-    tuple val(meta), path("${meta.sample}.recal.${output_fmt}"), path("${meta.sample}.recal.${output_fmt}.{bai,crai}"), emit: alignment
+    tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.{bai,crai}"), emit: alignment
 
     script:
-    if (output_fmt == 'bam') {
+    def out = "${meta.sample}.${meta.suffix}.${output_fmt}"
+    def in_fmt = alignment.name.endsWith('.cram') ? 'cram' : 'bam'
+    if (in_fmt == output_fmt) {
         """
         set -euo pipefail
-        if [ "${bam}" != "${meta.sample}.recal.bam" ]; then
-            ln -s "${bam}" "${meta.sample}.recal.bam"
-        fi
-        samtools index -@ ${task.cpus} ${meta.sample}.recal.bam
+        ln -s ${alignment} ${out}
+        samtools index -@ ${task.cpus} ${out}
         """
     } else {
         """
         set -euo pipefail
-        samtools view -@ ${task.cpus} -C -T ${ref_fasta} --write-index \\
-            -o ${meta.sample}.recal.cram ${bam}
+        samtools view -@ ${task.cpus} ${output_fmt == 'cram' ? '-C' : '-b'} -T ${ref_fasta} --write-index -o ${out}##idx##${out}.${output_fmt == 'cram' ? 'crai' : 'bai'} ${alignment}
         """
     }
 
     stub:
     def idx = output_fmt == 'cram' ? 'crai' : 'bai'
     """
-    touch ${meta.sample}.recal.${output_fmt} ${meta.sample}.recal.${output_fmt}.${idx}
+    touch ${meta.sample}.${meta.suffix}.${output_fmt} ${meta.sample}.${meta.suffix}.${output_fmt}.${idx}
     """
 }
