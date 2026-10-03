@@ -18,6 +18,6 @@ process SAMTOOLS_STATS {
 
     stub:
     """
-    printf 'SN\\traw total sequences:\\t0\\nSN\\tnon-primary alignments:\\t0\\nSN\\tsupplementary alignments:\\t0\\n' > ${meta.sample}.stats
+    printf 'SN\\traw total sequences:\\t0\\nSN\\tnon-primary alignments:\\t0\\nSN\\tsupplementary alignments:\\t0\\nSN\\terror rate:\\t0.000000e+00\\n' > ${meta.sample}.stats
     """
 }

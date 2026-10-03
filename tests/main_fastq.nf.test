@@ -14,6 +14,7 @@ nextflow_pipeline {
             outdir = "${outputDir}/results"
         } }
         then {
+            assert workflow.success
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('FASTP') } == 3
             assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
@@ -32,6 +33,7 @@ nextflow_pipeline {
             outdir = "${outputDir}/results"
         } }
         then {
+            assert workflow.success
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 0
             assert file("${outputDir}/results/preprocessing/markduplicates/S1/S1.md.cram").exists()

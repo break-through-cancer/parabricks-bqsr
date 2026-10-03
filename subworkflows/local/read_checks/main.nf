@@ -39,7 +39,9 @@ def samtoolsStatsCounts(Object stats) {
     def v = [:]
     toPath(stats).eachLine { line ->
         def t = line.tokenize('\t')
-        if (t.size() >= 3 && t[0] == 'SN') v[t[1]] = t[2] as long
+        if (t.size() >= 3 && t[0] == 'SN' && t[1] in ['raw total sequences:', 'non-primary alignments:', 'supplementary alignments:']) {
+            v[t[1]] = t[2] as long
+        }
     }
     def raw = v['raw total sequences:'] ?: 0L
     [primary: raw, records: raw + (v['non-primary alignments:'] ?: 0L) + (v['supplementary alignments:'] ?: 0L)]

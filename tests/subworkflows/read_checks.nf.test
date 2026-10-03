@@ -10,6 +10,11 @@ nextflow_function {
         """ } }
         then { assert function.result == [primary: 10L, records: 13L] }
     }
+    test("samtools stats counts from real samtools output, which includes decimal SN values") {
+        function "samtoolsStatsCounts"
+        when { function { "input[0] = file(\"\${projectDir}/tests/fixtures/modules/sample.stats\")" } }
+        then { assert function.result == [primary: 10L, records: 11L] }
+    }
     test("idxstats total includes the unplaced line") {
         function "idxstatsTotal"
         when { function { """
