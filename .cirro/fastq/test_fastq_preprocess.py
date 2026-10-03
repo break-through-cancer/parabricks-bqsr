@@ -73,3 +73,34 @@ def test_custom_genome_resolves_dataset_files_and_known_sites():
 def test_custom_genome_without_index_is_an_error():
     with pytest.raises(ValueError, match="BWA genome index"):
         apply_genome_params({"genome_source": "dataset"})
+
+
+def test_top_up_runs_in_the_same_lane_are_all_kept():
+    f = files([
+        ("S1", "1", 1, "s3://b/run1/S1_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/run1/S1_L001_R2_001.fastq.gz"),
+        ("S1", "1", 1, "s3://b/run2/S1_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/run2/S1_L001_R2_001.fastq.gz"),
+    ])
+    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+    assert sorted(sheet["fastq_1"]) == ["s3://b/run1/S1_L001_R1_001.fastq.gz", "s3://b/run2/S1_L001_R1_001.fastq.gz"]
+    assert sorted(sheet["fastq_2"]) == ["s3://b/run1/S1_L001_R2_001.fastq.gz", "s3://b/run2/S1_L001_R2_001.fastq.gz"]
+    assert sheet["lane"].tolist() == ["0", "1"]
+
+
+def test_laneless_chunks_are_all_kept_and_paired_by_name():
+    f = files([
+        ("S1", None, 1, "s3://b/S1_part1_R1.fastq.gz"), ("S1", None, 2, "s3://b/S1_part1_R2.fastq.gz"),
+        ("S1", None, 1, "s3://b/S1_part2_R1.fastq.gz"), ("S1", None, 2, "s3://b/S1_part2_R2.fastq.gz"),
+    ])
+    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+    pairs = sorted(zip(sheet["fastq_1"], sheet["fastq_2"]))
+    assert pairs == [("s3://b/S1_part1_R1.fastq.gz", "s3://b/S1_part1_R2.fastq.gz"),
+                     ("s3://b/S1_part2_R1.fastq.gz", "s3://b/S1_part2_R2.fastq.gz")]
+
+
+def test_read_1_without_a_matching_read_2_in_a_paired_sample_is_an_error():
+    f = files([
+        ("S1", "1", 1, "s3://b/S1_A_R1.fastq.gz"), ("S1", "1", 2, "s3://b/S1_A_R2.fastq.gz"),
+        ("S1", "1", 1, "s3://b/S1_B_R1.fastq.gz"),
+    ])
+    with pytest.raises(ValueError, match="S1_B_R1.fastq.gz"):
+        build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
