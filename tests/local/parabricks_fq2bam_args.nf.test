@@ -1,0 +1,53 @@
+nextflow_function {
+    name "Test fq2bamArgs"
+    script "modules/local/parabricks_fq2bam.nf"
+    function "fq2bamArgs"
+
+    test("paired, two lanes, tumor, known sites and intervals") {
+        when { function { """
+            input[0] = [sample: 'S1', status: 1, single_end: false, read_groups: ['@RG\\\\tID:A', '@RG\\\\tID:B']]
+            input[1] = ['reads/1/a1.fq.gz', 'reads/2/a2.fq.gz', 'reads/3/b1.fq.gz', 'reads/4/b2.fq.gz']
+            input[2] = ['known_sites/1/x.vcf.gz', 'known_sites/2/y.vcf.gz']
+            input[3] = 'i.bed'
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, num_gpus: 1]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--in-fq reads/1/a1.fq.gz reads/2/a2.fq.gz "@RG\\tID:A"')
+            assert a.contains('--in-fq reads/3/b1.fq.gz reads/4/b2.fq.gz "@RG\\tID:B"')
+            assert a.contains('--knownSites known_sites/1/x.vcf.gz --knownSites known_sites/2/y.vcf.gz')
+            assert !a.contains('.tbi')
+            assert a.contains('--out-recal-file S1.table') && a.contains('--interval-file i.bed')
+            assert a.contains('--out-bam S1.md.cram') && a.contains('--out-duplicate-metrics S1.duplicate-metrics.txt')
+            assert a.contains('--bwa-options="-K 100000000 -Y -B 3"')
+            assert a.contains('--memory-limit 32') && a.contains('--num-gpus 1') && a.contains('--bwa-cpu-thread-pool 16')
+            assert !a.contains('--markdups-single-ended-start-end')
+        }
+    }
+    test("single lane, single known site and no intervals: single Paths are normalised") {
+        when { function { """
+            input[0] = [sample: 'S2', status: 0, single_end: true, read_groups: ['@RG\\\\tID:C']]
+            input[1] = 'reads/1/c.fq.gz'
+            input[2] = 'known_sites/1/x.vcf.gz'
+            input[3] = []
+            input[4] = [optical_distance: 2500, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 31, num_gpus: 2]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--in-se-fq reads/1/c.fq.gz "@RG\\tID:C"')
+            assert a.contains('--knownSites known_sites/1/x.vcf.gz') && !a.contains('--interval-file')
+            assert a.contains('--bwa-options="-K 100000000 -Y"') && a.contains('--memory-limit 15')
+            assert a.contains('--markdups-single-ended-start-end') && a.contains('--optical-duplicate-pixel-distance 2500')
+        }
+    }
+    test("no known sites: no table, no knownSites") {
+        when { function { """
+            input[0] = [sample: 'S3', status: 0, single_end: false, read_groups: ['@RG\\\\tID:D']]
+            input[1] = ['a.fq.gz', 'b.fq.gz']
+            input[2] = []
+            input[3] = []
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 4, memory_gb: 8, num_gpus: 1]
+        """ } }
+        then { assert !function.result.contains('--knownSites') && !function.result.contains('--out-recal-file') }
+    }
+}
