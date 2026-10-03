@@ -1,0 +1,23 @@
+nextflow_workflow {
+    name "Test PREPARE_KNOWN_SITES"
+    script "subworkflows/local/prepare_known_sites/main.nf"
+    workflow "PREPARE_KNOWN_SITES"
+
+    test("indexed VCFs pass through, unindexed ones get indexed, order is kept") {
+        when { workflow { """
+            def g = "\${projectDir}/tests/fixtures/genome"
+            input[0] = ["\$g/known_sites.vcf.gz", "\$g/known_sites_nocontig.vcf.gz"]
+        """ } }
+        then {
+            assert workflow.success
+            def (vcfs, tbis) = workflow.out.known_sites[0]
+            assert vcfs.collect { file(it).name } == ['known_sites.vcf.gz', 'known_sites_nocontig.vcf.gz']
+            assert tbis.collect { file(it).name } == ['known_sites.vcf.gz.tbi', 'known_sites_nocontig.vcf.gz.tbi']
+            assert workflow.trace.tasks().size() == 1
+        }
+    }
+    test("no known sites emits two empty lists") {
+        when { workflow { "input[0] = []" } }
+        then { assert workflow.success; assert workflow.out.known_sites[0] == [[], []] }
+    }
+}
