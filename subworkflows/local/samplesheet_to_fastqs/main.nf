@@ -23,7 +23,7 @@ workflow SAMPLESHEET_TO_FASTQS {
 }
 
 def samplesheetEntry(Object path) {
-    def header = file(path.toString()).withReader { it.readLine() }?.tokenize(',')*.trim() ?: []
+    def header = toPath(path).withReader { it.readLine() }?.tokenize(',')*.trim() ?: []
     def fastq = 'fastq_1' in header
     def alignment = 'alignment' in header
     if (fastq && alignment) error "Samplesheet ${path} has both FASTQ and alignment columns; use one entry point per run"
@@ -32,7 +32,7 @@ def samplesheetEntry(Object path) {
 }
 
 def flowcellFromFastq(Object path) {
-    def f = file(path.toString())
+    def f = toPath(path)
     def line = f.withInputStream { is ->
         def stream = f.name.endsWith('.gz') ? new java.util.zip.GZIPInputStream(is) : is
         new BufferedReader(new InputStreamReader(stream)).readLine()
@@ -69,4 +69,8 @@ def checkFastqSamples(List rows) {
             error "Sample '${sample}' has lane '${lane}' more than once"
         }
     }
+}
+
+def toPath(Object p) {
+    p instanceof CharSequence ? file(p.toString()) : p
 }

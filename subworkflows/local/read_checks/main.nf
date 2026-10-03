@@ -31,13 +31,13 @@ workflow READ_CHECKS {
 }
 
 def fastpReadCount(Object json, boolean trimmed) {
-    def s = new groovy.json.JsonSlurper().parse(file(json.toString()).toFile()).summary
+    def s = new groovy.json.JsonSlurper().parseText(toPath(json).text).summary
     (trimmed ? s.after_filtering.total_reads : s.before_filtering.total_reads) as long
 }
 
 def samtoolsStatsCounts(Object stats) {
     def v = [:]
-    file(stats.toString()).eachLine { line ->
+    toPath(stats).eachLine { line ->
         def t = line.tokenize('\t')
         if (t.size() >= 3 && t[0] == 'SN') v[t[1]] = t[2] as long
     }
@@ -47,7 +47,7 @@ def samtoolsStatsCounts(Object stats) {
 
 def idxstatsTotal(Object idxstats) {
     def total = 0L
-    file(idxstats.toString()).eachLine { line ->
+    toPath(idxstats).eachLine { line ->
         def t = line.tokenize('\t')
         if (t.size() >= 4) total += (t[2] as long) + (t[3] as long)
     }
@@ -63,4 +63,8 @@ def readCheckFailures(Map c) {
         f << "Sample '${c.sample}': records before BQSR/finalize (${c.before_records}) != final records (${c.final_records})."
     }
     f
+}
+
+def toPath(Object p) {
+    p instanceof CharSequence ? file(p.toString()) : p
 }

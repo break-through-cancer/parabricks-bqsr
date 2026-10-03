@@ -1,0 +1,14 @@
+nextflow_function {
+    name "Non-local filesystem paths: subworkflows/local/samplesheet_to_fastqs/main.nf"
+    script "subworkflows/local/samplesheet_to_fastqs/main.nf"
+
+    test("flowcellFromFastq reads a non-default-filesystem Path") {
+        function "flowcellFromFastq"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/fastq/S1_L1_R1.fastq.gz')
+        """ } }
+        then { assert function.result == 'HFLOWCLXX' }
+    }
+
+}

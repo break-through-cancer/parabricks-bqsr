@@ -1,0 +1,32 @@
+nextflow_function {
+    name "Non-local filesystem paths: subworkflows/local/read_checks/main.nf"
+    script "subworkflows/local/read_checks/main.nf"
+
+    test("samtoolsStatsCounts reads a non-default-filesystem Path") {
+        function "samtoolsStatsCounts"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/qc/s.stats')
+        """ } }
+        then { assert function.result == [primary: 10, records: 13] }
+    }
+
+    test("idxstatsTotal reads a non-default-filesystem Path") {
+        function "idxstatsTotal"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/qc/i.txt')
+        """ } }
+        then { assert function.result == 13 }
+    }
+
+    test("fastpReadCount reads a non-default-filesystem Path") {
+        function "fastpReadCount"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/qc/f.json'); input[1] = false
+        """ } }
+        then { assert function.result == 100 }
+    }
+
+}

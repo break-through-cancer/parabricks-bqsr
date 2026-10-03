@@ -56,14 +56,14 @@ def intervalsMessage(Map refs) {
 }
 
 def readerFor(Object path) {
-    def f = file(path.toString())
+    def f = toPath(path)
     def stream = f.newInputStream()
     new BufferedReader(new InputStreamReader(f.name.endsWith('.gz') ? new java.util.zip.GZIPInputStream(stream) : stream))
 }
 
 def faiContigs(Object path) {
     def contigs = [:]
-    file(path.toString()).eachLine { line ->
+    toPath(path).eachLine { line ->
         def t = line.tokenize('\t')
         if (t.size() >= 2) contigs[t[0]] = t[1] as Long
     }
@@ -71,7 +71,7 @@ def faiContigs(Object path) {
 }
 
 def annContigs(Object path) {
-    def lines = file(path.toString()).readLines()
+    def lines = toPath(path).readLines()
     def contigs = [:]
     (1..<lines.size()).step(2).findAll { i -> i + 1 < lines.size() }.each { i ->
         contigs[lines[i].tokenize(' ')[1]] = lines[i + 1].tokenize(' ')[1] as Long
@@ -121,7 +121,7 @@ def checkReferences(Map refs, boolean fastqEntry) {
         def ambs = amb instanceof List ? amb : [amb].findAll { it.exists() }
         if (ambs.size() != 1) {
             errors << "BWA index ${refs.bwa_index}: expected exactly one *.amb file, found ${ambs.size()}"
-        } else if (annContigs(ambs[0].toString().replaceAll(/\.amb$/, '.ann')) != fai) {
+        } else if (annContigs(ambs[0].resolveSibling(ambs[0].name.replaceAll(/\.amb$/, '.ann'))) != fai) {
             errors << "BWA index ${refs.bwa_index} does not match ${refs.ref_fasta}: contig names or lengths differ"
         }
     }
@@ -144,4 +144,8 @@ def checkReferences(Map refs, boolean fastqEntry) {
         }
     }
     [errors: errors, warnings: warnings]
+}
+
+def toPath(Object p) {
+    p instanceof CharSequence ? file(p.toString()) : p
 }
