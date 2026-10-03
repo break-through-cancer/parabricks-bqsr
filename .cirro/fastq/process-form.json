@@ -1,0 +1,73 @@
+{
+  "form": {
+    "type": "object",
+    "properties": {
+      "genome_selection": {
+        "title": "Reference Genome",
+        "type": "object",
+        "properties": {
+          "genome_source": {"title": "Reference Genome Source", "type": "string", "enum": ["igenomes", "dataset"], "default": "igenomes",
+            "description": "iGenomes GATK.GRCh38 (known sites and calling intervals included), or a custom genome from a Cirro BWA index dataset."}
+        },
+        "dependencies": {
+          "genome_source": {
+            "oneOf": [
+              {"properties": {
+                "genome_source": {"enum": ["igenomes"]},
+                "genome": {"title": "Genome", "type": "string", "enum": ["GATK.GRCh38"], "default": "GATK.GRCh38"},
+                "use_intervals": {"title": "Use calling intervals for the BQSR table", "type": "boolean", "default": true,
+                  "description": "Builds the BQSR model on GATK's WGS calling regions. Recommended for low-coverage data. Intervals never restrict which reads are output."}
+              }},
+              {"properties": {
+                "genome_source": {"enum": ["dataset"]},
+                "genome_index": {"title": "BWA Genome Index", "type": "string", "pathType": "dataset",
+                  "description": "A pre-built BWA (not BWA-MEM2) genome index dataset containing genome.fasta and genome.fasta.fai."},
+                "dbsnp": {"title": "Known Sites (VCF)", "type": "string", "pathType": "references", "file": "**/germline_resource/**/germline_resource.vcf.gz", "useS3Path": true,
+                  "description": "Optional. Without any known sites, BQSR is skipped and outputs are published as .md files."},
+                "known_indels": {"title": "Known Indels (VCF)", "type": "string", "pathType": "references", "file": "**/germline_resource/**/germline_resource.vcf.gz", "useS3Path": true,
+                  "description": "Optional second known-sites VCF."},
+                "custom_intervals": {"title": "Intervals (BED)", "type": "string", "pathType": "references", "file": "**/genome_bed/**/regions.bed",
+                  "description": "Optional. Restricts BQSR table building only."}
+              }, "required": ["genome_index"]}
+            ]
+          }
+        }
+      },
+      "output_fmt": {"title": "Output Format", "type": "string", "enum": ["cram", "bam"], "default": "cram"},
+      "quantization": {
+        "title": "Quality-Score Quantization", "type": "object",
+        "properties": {
+          "quantize_quals_enabled": {"title": "Quantize Quality Scores", "type": "boolean", "default": true},
+          "static_quantized_quals": {"title": "Static Quantization Bins", "type": "string", "default": "10,20,30", "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"},
+          "preserve_qscores_less_than": {"title": "Preserve Quality Scores Below", "type": "integer", "default": 6, "minimum": 0, "maximum": 93},
+          "round_down_quantized": {"title": "Round Down", "type": "boolean", "default": false}
+        }
+      },
+      "read_trimming": {
+        "title": "Read Trimming (fastp)", "type": "object",
+        "properties": {
+          "trim_fastq": {"title": "Trim reads", "type": "boolean", "default": false,
+            "description": "fastp always runs for read counts and QC; this enables adapter trimming and the options below."},
+          "clip_r1": {"title": "Clip R1 (5')", "type": "integer", "default": 0, "minimum": 0},
+          "clip_r2": {"title": "Clip R2 (5')", "type": "integer", "default": 0, "minimum": 0},
+          "three_prime_clip_r1": {"title": "Clip R1 (3')", "type": "integer", "default": 0, "minimum": 0},
+          "three_prime_clip_r2": {"title": "Clip R2 (3')", "type": "integer", "default": 0, "minimum": 0},
+          "trim_nextseq": {"title": "Trim poly-G tails", "type": "boolean", "default": false},
+          "length_required": {"title": "Minimum read length", "type": "integer", "default": 15, "minimum": 1},
+          "save_trimmed": {"title": "Save trimmed FASTQs", "type": "boolean", "default": false}
+        }
+      },
+      "advanced": {
+        "title": "Advanced Options", "type": "object",
+        "properties": {
+          "markdups_se_mode": {"title": "Single-end duplicate marking", "type": "string", "enum": ["5prime", "start-end"], "default": "5prime",
+            "description": "5prime: standard (Picard/GATK). start-end: both fragment ends; for adapter-trimmed short-fragment data such as cfDNA."},
+          "optical_duplicate_pixel_distance": {"title": "Optical duplicate pixel distance", "type": "integer", "default": 100,
+            "description": "Affects optical-duplicate metrics only. 2500 is usual for patterned flowcells."},
+          "fq2bam_gpus": {"title": "GPUs for alignment", "type": "integer", "default": 1, "minimum": 1, "maximum": 8}
+        }
+      }
+    }
+  },
+  "ui": {}
+}
