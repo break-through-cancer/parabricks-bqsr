@@ -1,0 +1,56 @@
+nextflow_pipeline {
+    name "Test main.nf FASTQ entry"
+    script "main.nf"
+    options "-stub"
+    config "tests/main_fastq.nf.config"
+
+    test("with known sites: FASTP per lane, FQ2BAM per sample, APPLYBQSR, recalibrated outputs and table") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('FASTP') } == 3
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
+            }
+        }
+    }
+    test("without known sites: no APPLYBQSR, md outputs under markduplicates") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 0
+            assert file("${outputDir}/results/preprocessing/markduplicates/S1/S1.md.cram").exists()
+            def log = file("${outputDir}/../meta/nextflow.log").text
+            assert log.contains('No known sites supplied: BQSR is skipped')
+            assert log.contains('No intervals supplied')
+        }
+    }
+    test("a mismatched BWA index stops the run before any task") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa_mismatch"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.failed
+            assert workflow.stdout.join('\n').contains('does not match')
+            assert workflow.trace.tasks().size() == 0
+        }
+    }
+}

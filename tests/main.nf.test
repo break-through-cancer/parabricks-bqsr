@@ -9,6 +9,7 @@ nextflow_pipeline {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir        = "${outputDir}/results"
@@ -24,7 +25,8 @@ nextflow_pipeline {
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram.crai").exists()
             }
-            assert file("${outputDir}/results").list() as List == ['preprocessing']
+            assert (file("${outputDir}/results").list() as List).sort() == ['multiqc', 'pipeline_info', 'preprocessing', 'reports']
+            assert file("${outputDir}/results/multiqc/multiqc_report.html").exists()
         }
     }
 
@@ -32,6 +34,7 @@ nextflow_pipeline {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir                 = "${outputDir}/results"
@@ -48,6 +51,7 @@ nextflow_pipeline {
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam.bai").exists()
             }
+            assert file("${outputDir}/results/multiqc/multiqc_report.html").exists()
         }
     }
 
@@ -67,6 +71,7 @@ nextflow_pipeline {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir     = "${outputDir}/results"
@@ -84,6 +89,7 @@ nextflow_pipeline {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir                 = "${outputDir}/results"
