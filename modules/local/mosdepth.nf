@@ -14,11 +14,12 @@ process MOSDEPTH {
     script:
     """
     set -euo pipefail
-    mosdepth --fast-mode --no-per-base -t ${task.cpus} --fasta ${ref_fasta} ${meta.sample} ${alignment}
-    expected=\$(awk '{ s += \$2 } END { print s }' ${ref_fasta_fai})
+    mosdepth --fast-mode --no-per-base -t ${task.cpus} --fasta ${ref_fasta} ${meta.sample} ${alignment} 2> mosdepth.err \
+        || { cat mosdepth.err >&2; exit 1; }
+    cat mosdepth.err >&2
     covered=\$(awk '\$1 == "total" { print \$2 }' ${meta.sample}.mosdepth.summary.txt)
-    if [ "\$covered" != "\$expected" ]; then
-        echo "mosdepth covered \${covered:-0} of \$expected reference bases in ${alignment}: it could not read the file (an unsupported CRAM version?)" >&2
+    if grep -qE '\\[E::|hts-nim\\] error' mosdepth.err || [ "\${covered:-0}" -eq 0 ]; then
+        echo "mosdepth could not read ${alignment}: decode errors or no coverage (an unsupported CRAM version?)" >&2
         exit 1
     fi
     """

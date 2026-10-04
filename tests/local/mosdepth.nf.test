@@ -31,7 +31,16 @@ nextflow_process {
         """ } }
         then {
             assert process.failed
-            assert (process.stdout + process.stderr).join('\n').contains('mosdepth covered 0 of 500 reference bases')
+            assert (process.stdout + process.stderr).join('\n').contains('mosdepth could not read')
         }
+    }
+
+    test("a reference contig with no reads does not fail the task (real hg38 has many)") {
+        when { process { """
+            def e = "\${projectDir}/tests/fixtures/modules/emptycontig"
+            input[0] = [[sample: 'S'], file("\$e/sample.bam"), file("\$e/sample.bam.bai")]
+            input[1] = [file("\$e/reference.fasta"), file("\$e/reference.fasta.fai")]
+        """ } }
+        then { assert process.success }
     }
 }
