@@ -143,3 +143,13 @@ def test_every_dataset_field_is_filtered_by_process():
     assert datasets, "expected at least one dataset field"
     assert all(f.get("process") for f in datasets.values()), [k for k, f in datasets.items() if not f.get("process")]
     assert datasets["genome_index"]["process"] == ["process-cirro-genome-index-bwa-1-0", "genome_bwa_index"]
+
+
+def test_form_offers_low_memory_off_by_default_and_hides_gpuwrite():
+    import json
+    here = pathlib.Path(__file__).parent
+    form = (here / "process-form.json").read_text()
+    advanced = json.loads(form)["form"]["properties"]["advanced"]["properties"]
+    assert advanced["fq2bam_low_memory"]["default"] is False
+    assert "fq2bam_gpuwrite" not in form
+    assert "fq2bam_gpuwrite" not in (here / "process-input.json").read_text()

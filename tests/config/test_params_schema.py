@@ -53,3 +53,11 @@ def test_pipeline_requires_nextflow_26_04():
     out = subprocess.run(["nextflow", "config", "-flat"], cwd=ROOT, capture_output=True, text=True,
                          env={**os.environ}, check=True).stdout
     assert "manifest.nextflowVersion = '!>=26.04.0'" in out
+
+
+def test_fq2bam_defaults_follow_the_ab_test():
+    # A/B on a 21x WGS sample, A10G 24 GB: --low-memory off cut BWA time 27% with no GPU OOM;
+    # --gpuwrite off made no measurable difference, so it stays on.
+    params = config_params()
+    assert params["fq2bam_low_memory"] is False
+    assert params["fq2bam_gpuwrite"] is True

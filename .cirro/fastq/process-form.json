@@ -66,10 +66,8 @@
           "optical_duplicate_pixel_distance": {"title": "Optical duplicate pixel distance", "type": "integer", "default": 100,
             "description": "Affects optical-duplicate metrics only. 2500 is usual for patterned flowcells."},
           "fq2bam_gpus": {"title": "GPUs for alignment", "type": "integer", "default": 1, "minimum": 1, "maximum": 8},
-          "fq2bam_low_memory": {"title": "fq2bam low-memory mode", "type": "boolean", "default": true,
-            "description": "One BWA stream per GPU so alignment fits a 24 GB GPU. Turn off only to test speed on GPUs with more memory."},
-          "fq2bam_gpuwrite": {"title": "fq2bam GPU output compression", "type": "boolean", "default": true,
-            "description": "Compress the output on a GPU. With one GPU it shares the device with BQSR."}
+          "fq2bam_low_memory": {"title": "fq2bam low-memory mode", "type": "boolean", "default": false,
+            "description": "One BWA stream per GPU. Off by default (faster; fits the A10G 24 GB). Turn on only if alignment runs out of GPU memory."}
         }
       }
     }

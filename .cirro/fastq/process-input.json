@@ -26,6 +26,5 @@
   "markdups_se_mode": "$.dataset.params.advanced.markdups_se_mode",
   "optical_duplicate_pixel_distance": "$.dataset.params.advanced.optical_duplicate_pixel_distance",
   "fq2bam_gpus": "$.dataset.params.advanced.fq2bam_gpus",
-  "fq2bam_low_memory": "$.dataset.params.advanced.fq2bam_low_memory",
-  "fq2bam_gpuwrite": "$.dataset.params.advanced.fq2bam_gpuwrite"
+  "fq2bam_low_memory": "$.dataset.params.advanced.fq2bam_low_memory"
 }

@@ -160,8 +160,8 @@
                 },
                 "fq2bam_low_memory": {
                     "type": "boolean",
-                    "default": true,
-                    "description": "Pass --low-memory to fq2bam: one BWA stream per GPU so alignment fits a 24 GB GPU (A10G/L4). Turning it off can speed alignment on GPUs with more memory, or fail on smaller ones."
+                    "default": false,
+                    "description": "Pass --low-memory to fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x WGS sample. Turn on if a smaller GPU runs out of memory."
                 },
                 "fq2bam_gpuwrite": {
                     "type": "boolean",
