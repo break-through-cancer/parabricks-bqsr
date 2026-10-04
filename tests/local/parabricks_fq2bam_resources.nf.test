@@ -1,0 +1,22 @@
+nextflow_function {
+    name "Test fq2bamResources"
+    script "modules/local/parabricks_fq2bam.nf"
+    function "fq2bamResources"
+
+    test("1 GPU keeps today's 16 CPUs / 64 GB") {
+        when { function { "input[0] = 1" } }
+        then { assert function.result == [cpus: 16, memory_gb: 64] }
+    }
+    test("2 GPUs: 24 CPUs / 88 GB, so two jobs share a g5.12xlarge") {
+        when { function { "input[0] = 2" } }
+        then { assert function.result == [cpus: 24, memory_gb: 88] }
+    }
+    test("4 GPUs: 48 CPUs / 176 GB, a whole g5.12xlarge") {
+        when { function { "input[0] = 4" } }
+        then { assert function.result == [cpus: 48, memory_gb: 176] }
+    }
+    test("a GPU count given as a string (Cirro params) is accepted") {
+        when { function { "input[0] = '2'" } }
+        then { assert function.result == [cpus: 24, memory_gb: 88] }
+    }
+}

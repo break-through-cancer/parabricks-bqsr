@@ -2,8 +2,8 @@ process PARABRICKS_FQ2BAM {
     tag "${meta.sample}"
     stageInMode 'copy'
     container 'nvcr.io/nvidia/clara/clara-parabricks:4.7.1-1'
-    cpus 16
-    memory '64 GB'
+    cpus { fq2bamResources(params.fq2bam_gpus).cpus }
+    memory { "${fq2bamResources(params.fq2bam_gpus).memory_gb} GB" }
 
     input:
     tuple val(meta), path(reads, stageAs: 'reads/?/*')
@@ -81,4 +81,9 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     a << "--num-gpus ${opts.num_gpus}"
     a << '--tmp-dir .'
     a.join(' ')
+}
+
+def fq2bamResources(Object gpus) {
+    def n = gpus.toString().toInteger()
+    [cpus: Math.max(16, 12 * n), memory_gb: Math.max(64, 44 * n)]
 }
