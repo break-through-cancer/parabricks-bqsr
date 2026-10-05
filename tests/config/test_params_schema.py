@@ -61,3 +61,8 @@ def test_fq2bam_defaults_follow_the_ab_test():
     params = config_params()
     assert params["fq2bam_low_memory"] is False
     assert params["fq2bam_gpuwrite"] is True
+
+
+def test_fq2bam_defaults_to_two_gpus():
+    # Same 21x sample: 2 GPUs cut fq2bam 48.8 -> 37.6 min for about 8% more fq2bam cost.
+    assert config_params()["fq2bam_gpus"] == 2

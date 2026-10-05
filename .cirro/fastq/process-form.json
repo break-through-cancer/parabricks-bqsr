@@ -65,7 +65,8 @@
             "description": "5prime: standard (Picard/GATK). start-end: both fragment ends; for adapter-trimmed short-fragment data such as cfDNA."},
           "optical_duplicate_pixel_distance": {"title": "Optical duplicate pixel distance", "type": "integer", "default": 100,
             "description": "Affects optical-duplicate metrics only. 2500 is usual for patterned flowcells."},
-          "fq2bam_gpus": {"title": "GPUs for alignment", "type": "integer", "default": 1, "minimum": 1, "maximum": 8},
+          "fq2bam_gpus": {"title": "GPUs for alignment", "type": "integer", "default": 2, "minimum": 1, "maximum": 8,
+            "description": "2 (default) is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; use 1 to minimise cost."},
           "fq2bam_low_memory": {"title": "fq2bam low-memory mode", "type": "boolean", "default": false,
             "description": "One BWA stream per GPU. Off by default (faster; fits the A10G 24 GB). Turn on only if alignment runs out of GPU memory."}
         }

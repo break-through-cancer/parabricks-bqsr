@@ -129,7 +129,7 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--save_trimmed` | `false` | Publish trimmed FASTQs. |
 | `--markdups_se_mode` | `5prime` | Single-end duplicate marking: `5prime` (standard) or `start-end` (adapter-trimmed short fragments such as cfDNA). |
 | `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
-| `--fq2bam_gpus` | `1` | GPUs for alignment. CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB (1 GPU: 16/64; 2: 24/88, two jobs fit a g5.12xlarge; 4: 48/176). |
+| `--fq2bam_gpus` | `2` | GPUs for alignment (2 is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; set 1 to minimise cost). CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB (1 GPU: 16/64; 2: 24/88, two jobs fit a g5.12xlarge; 4: 48/176). |
 | `--fq2bam_low_memory` | `false` | `--low-memory` for fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x sample. Turn on if a smaller GPU runs out of memory. |
 | `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Turning it off made no measurable difference on one GPU; not shown on the Cirro form. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
