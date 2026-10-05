@@ -8,11 +8,11 @@ COLUMNS = ["patient", "sample", "status", "lane", "fastq_1", "fastq_2"]
 FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals", "intervals_mode")
 
 
-READ_TOKEN = re.compile(r"(?<=[._])(R?)([12])(?=[._])")
+READ_TOKEN = re.compile(r"(?<=[._-])(R?)([12])(?=[._-])")
 
 
 def pair_key(path: str) -> str:
-    """The path with its last read-number token (R1/R2, _1/_2) masked, so mates share a key."""
+    """The path with its last read-number token (R1/R2, _1/_2, -1/-2) masked, so mates share a key."""
     head, _, name = path.rpartition("/")
     matches = list(READ_TOKEN.finditer(name))
     if matches:

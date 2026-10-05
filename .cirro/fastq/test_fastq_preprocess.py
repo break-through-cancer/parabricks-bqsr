@@ -192,3 +192,15 @@ def test_igenomes_branch_offers_three_interval_modes_and_a_custom_bed():
     custom = [b for b in igenomes["dependencies"]["intervals_mode"]["oneOf"] if b["properties"]["intervals_mode"]["enum"] == ["custom"]][0]
     bed = custom["properties"]["custom_intervals"]
     assert bed["pathType"] == "references" and bed["useS3Path"] is True and custom["required"] == ["custom_intervals"]
+
+
+def test_read_number_followed_by_a_hyphen_is_paired():
+    f = files([("S1", "1", 1, "s3://b/X99-0001_1-merged.fastq.gz"), ("S1", "1", 2, "s3://b/X99-0001_2-merged.fastq.gz")])
+    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+    assert sheet[["fastq_1", "fastq_2"]].values.tolist() == [["s3://b/X99-0001_1-merged.fastq.gz", "s3://b/X99-0001_2-merged.fastq.gz"]]
+
+
+def test_digits_inside_a_name_are_not_mistaken_for_read_numbers():
+    f = files([("S1", "1", 1, "s3://b/X1-1_S2_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/X1-1_S2_L001_R2_001.fastq.gz")])
+    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+    assert len(sheet) == 1 and sheet.iloc[0]["fastq_2"].endswith("R2_001.fastq.gz")
