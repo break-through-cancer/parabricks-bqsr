@@ -3,7 +3,7 @@ process PARABRICKS_APPLYBQSR {
     stageInMode 'copy'
     container 'nvcr.io/nvidia/clara/clara-parabricks:4.7.1-1'
     cpus 12
-    memory '72 GB'
+    memory { "${72 * task.attempt} GB" }
 
     input:
     tuple val(meta), path(alignment, stageAs: 'input/*'), path(alignment_index, stageAs: 'input/*'), path(recal_table)

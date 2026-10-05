@@ -3,7 +3,7 @@ process PARABRICKS_FQ2BAM {
     stageInMode 'copy'
     container 'nvcr.io/nvidia/clara/clara-parabricks:4.7.1-1'
     cpus { fq2bamResources(params.fq2bam_gpus).cpus }
-    memory { "${fq2bamResources(params.fq2bam_gpus).memory_gb} GB" }
+    memory { "${fq2bamResources(params.fq2bam_gpus).memory_gb * task.attempt} GB" }
 
     input:
     tuple val(meta), path(reads, stageAs: 'reads/?/*')
