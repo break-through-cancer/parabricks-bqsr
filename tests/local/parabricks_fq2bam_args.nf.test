@@ -107,4 +107,19 @@ nextflow_function {
              '--optical-duplicate-pixel-distance', '--markdups-single-ended-start-end'].each { assert !a.contains(it) }
         }
     }
+
+    test("a BAM intermediate writes S.md.bam; CRAM stays the default") {
+        when { function { """
+            input[0] = [sample: 'S7', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']]
+            input[1] = ['a.fq.gz', 'b.fq.gz']
+            input[2] = []
+            input[3] = []
+            input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: true,
+                        intermediate_fmt: 'bam']
+        """ } }
+        then {
+            assert function.result.contains('--out-bam S7.md.bam ')
+            assert !function.result.contains('.md.cram')
+        }
+    }
 }

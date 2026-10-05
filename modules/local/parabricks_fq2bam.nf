@@ -15,7 +15,7 @@ process PARABRICKS_FQ2BAM {
     path intervals
 
     output:
-    tuple val(meta), path("${meta.sample}.md.cram"), path("${meta.sample}.md.cram.crai"), emit: cram
+    tuple val(meta), path("${meta.sample}.md.${params.fq2bam_intermediate_fmt}"), path("${meta.sample}.md.${params.fq2bam_intermediate_fmt}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'}"), emit: cram
     tuple val(meta), path("${meta.sample}.table"), emit: table, optional: true
     tuple val(meta), path("${meta.sample}.fq2bam.idxstats"), emit: idxstats
     tuple val(meta), path("${meta.sample}.duplicate-metrics.txt"), emit: duplicate_metrics
@@ -25,8 +25,10 @@ process PARABRICKS_FQ2BAM {
     def args = fq2bamArgs(meta, reads, vcfs, intervals, [
         optical_distance: params.optical_duplicate_pixel_distance, markdups_se_mode: params.markdups_se_mode,
         cpus: task.cpus, memory_gb: task.memory.toGiga(), num_gpus: task.accelerator ? task.accelerator.request : 1,
-        low_memory: params.fq2bam_low_memory, gpuwrite: params.fq2bam_gpuwrite
+        low_memory: params.fq2bam_low_memory, gpuwrite: params.fq2bam_gpuwrite, intermediate_fmt: params.fq2bam_intermediate_fmt
     ])
+    def out = "${meta.sample}.md.${params.fq2bam_intermediate_fmt}"
+    def index = "${out}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'}"
     """
     set -euo pipefail
     ${pbrunFunction()}
@@ -39,13 +41,15 @@ process PARABRICKS_FQ2BAM {
     cp -L ${fasta} "\$INDEX"
     cp -L ${fai} "\$INDEX.fai"
     pbrun fq2bam --ref "\$INDEX" ${args}
-    samtools idxstats -@ ${task.cpus} ${meta.sample}.md.cram > ${meta.sample}.fq2bam.idxstats
+    [ -f ${index} ] || samtools index -@ ${task.cpus} ${out}
+    samtools idxstats -@ ${task.cpus} ${out} > ${meta.sample}.fq2bam.idxstats
     """
 
     stub:
     def table = (vcfs instanceof List ? vcfs : [vcfs]).findAll() ? "touch ${meta.sample}.table" : ''
+    def out = "${meta.sample}.md.${params.fq2bam_intermediate_fmt}"
     """
-    touch ${meta.sample}.md.cram ${meta.sample}.md.cram.crai ${meta.sample}.duplicate-metrics.txt
+    touch ${out} ${out}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'} ${meta.sample}.duplicate-metrics.txt
     printf 'chrT\\t500\\t0\\t0\\n*\\t0\\t0\\t0\\n' > ${meta.sample}.fq2bam.idxstats
     mkdir ${meta.sample}_qc_metrics
     ${table}
@@ -81,7 +85,7 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     if (sites) a << "--out-recal-file ${meta.sample}.table"
     def iv = asList(intervals)
     if (iv) a << "--interval-file ${iv[0]}"
-    a << "--out-bam ${meta.sample}.md.cram"
+    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'cram'}"
     a << "--out-duplicate-metrics ${meta.sample}.duplicate-metrics.txt"
     a << "--out-qc-metrics-dir ${meta.sample}_qc_metrics"
     a << "--optical-duplicate-pixel-distance ${opts.optical_distance}"

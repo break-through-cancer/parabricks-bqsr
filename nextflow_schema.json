@@ -168,6 +168,12 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Pass --gpuwrite to fq2bam: compress the output on a GPU. With a single GPU it shares the device with BQSR."
+                },
+                "fq2bam_intermediate_fmt": {
+                    "type": "string",
+                    "default": "cram",
+                    "enum": ["cram", "bam"],
+                    "description": "Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr. Not published; final outputs follow --output_fmt."
                 }
             }
         },

@@ -8,6 +8,7 @@ nextflow_function {
             input[0] = [sample: 'S6']
             input[1] = ['known_sites/1/x.vcf.gz', 'known_sites/2/y.vcf.gz.tbi']
             input[2] = 'i.bed'
+            input[3] = 'S6.md.cram'
         """ } }
         then {
             def a = function.result
@@ -24,7 +25,18 @@ nextflow_function {
             input[0] = [sample: 'S6']
             input[1] = []
             input[2] = []
+            input[3] = 'S6.md.cram'
         """ } }
         then { assert function.result == '' }
+    }
+
+    test("the table is built from a BAM intermediate when given one") {
+        when { function { """
+            input[0] = [sample: 'S6']
+            input[1] = ['known_sites/1/x.vcf.gz']
+            input[2] = []
+            input[3] = 'S6.md.bam'
+        """ } }
+        then { assert function.result.contains('--in-bam S6.md.bam ') }
     }
 }

@@ -33,4 +33,12 @@ nextflow_function {
             assert !a.contains('--gpuwrite')
         }
     }
+
+    test("a BAM intermediate writes S.md.bam") {
+        when { function { """
+            input[0] = [sample: 'S6', lane_single_end: [false, true]]
+            input[1] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, gpuwrite: true, intermediate_fmt: 'bam']
+        """ } }
+        then { assert function.result.contains('--out-bam S6.md.bam ') }
+    }
 }

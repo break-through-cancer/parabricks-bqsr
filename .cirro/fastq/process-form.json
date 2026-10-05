@@ -275,6 +275,16 @@
             "type": "boolean",
             "default": false,
             "description": "One BWA stream per GPU. Off by default (faster; fits the A10G 24 GB). Turn on only if alignment runs out of GPU memory."
+          },
+          "fq2bam_intermediate_fmt": {
+            "title": "Intermediate alignment format",
+            "type": "string",
+            "enum": [
+              "cram",
+              "bam"
+            ],
+            "default": "cram",
+            "description": "Format of the duplicate-marked alignment between alignment and BQSR (not published). Under test: BAM may be faster to write and read."
           }
         }
       }

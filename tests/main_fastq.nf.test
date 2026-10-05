@@ -84,6 +84,25 @@ nextflow_pipeline {
         }
     }
 
+    test("a BAM intermediate between fq2bam and applybqsr gives the same published outputs") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            fq2bam_intermediate_fmt = 'bam'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
+            }
+        }
+    }
+
     test("a mismatched BWA index stops the run before any task") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'

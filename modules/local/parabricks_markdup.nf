@@ -14,7 +14,7 @@ process PARABRICKS_MARKDUP {
     path intervals
 
     output:
-    tuple val(meta), path("${meta.sample}.md.cram"), path("${meta.sample}.md.cram.crai"), emit: cram
+    tuple val(meta), path("${meta.sample}.md.${params.fq2bam_intermediate_fmt}"), path("${meta.sample}.md.${params.fq2bam_intermediate_fmt}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'}"), emit: cram
     tuple val(meta), path("${meta.sample}.table"), emit: table, optional: true
     tuple val(meta), path("${meta.sample}.fq2bam.idxstats"), emit: idxstats
     tuple val(meta), path("${meta.sample}.duplicate-metrics.txt"), emit: duplicate_metrics
@@ -26,9 +26,11 @@ process PARABRICKS_MARKDUP {
     def gpuwrite = params.fq2bam_gpuwrite ? '--gpuwrite' : ''
     def markdup = markdupArgs(meta, [
         optical_distance: params.optical_duplicate_pixel_distance, markdups_se_mode: params.markdups_se_mode,
-        cpus: task.cpus, memory_gb: task.memory.toGiga(), gpuwrite: params.fq2bam_gpuwrite
+        cpus: task.cpus, memory_gb: task.memory.toGiga(), gpuwrite: params.fq2bam_gpuwrite, intermediate_fmt: params.fq2bam_intermediate_fmt
     ])
-    def bqsr = bqsrArgs(meta, vcfs, intervals)
+    def out = "${s}.md.${params.fq2bam_intermediate_fmt}"
+    def index = "${out}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'}"
+    def bqsr = bqsrArgs(meta, vcfs, intervals, out)
     """
     set -euo pipefail
     ${pbrunFunction()}
@@ -43,25 +45,26 @@ process PARABRICKS_MARKDUP {
     rm ${s}.merged.bam
     pbrun markdup --ref ${fasta} ${markdup}
     rm ${s}.qsorted.bam
-    HD=\$(samtools view -H ${s}.md.cram | grep '^@HD' || true)
+    HD=\$(samtools view -H ${out} | grep '^@HD' || true)
     if [[ "\$HD" != *SO:coordinate* ]]; then
         echo "markdup output is not coordinate-sorted; sorting it" >&2
-        mv ${s}.md.cram ${s}.unsorted.cram
-        rm -f ${s}.md.cram.crai
-        pbrun bamsort --ref ${fasta} --in-bam ${s}.unsorted.cram --out-bam ${s}.md.cram \\
+        mv ${out} unsorted.${out}
+        rm -f ${index}
+        pbrun bamsort --ref ${fasta} --in-bam unsorted.${out} --out-bam ${out} \\
             --sort-order coordinate --gpusort ${gpuwrite} --mem-limit ${mem} --tmp-dir .
-        rm ${s}.unsorted.cram
+        rm unsorted.${out}
     fi
-    [ -f ${s}.md.cram.crai ] || samtools index -@ ${task.cpus} ${s}.md.cram
+    [ -f ${index} ] || samtools index -@ ${task.cpus} ${out}
     ${bqsr ? "pbrun bqsr --ref ${fasta} ${bqsr} --tmp-dir ." : ''}
-    pbrun collectmultiplemetrics --ref ${fasta} --bam ${s}.md.cram --out-qc-metrics-dir ${s}_qc_metrics --gen-all-metrics --tmp-dir .
-    samtools idxstats -@ ${task.cpus} ${s}.md.cram > ${s}.fq2bam.idxstats
+    pbrun collectmultiplemetrics --ref ${fasta} --bam ${out} --out-qc-metrics-dir ${s}_qc_metrics --gen-all-metrics --tmp-dir .
+    samtools idxstats -@ ${task.cpus} ${out} > ${s}.fq2bam.idxstats
     """
 
     stub:
-    def table = bqsrArgs(meta, vcfs, intervals) ? "touch ${meta.sample}.table" : ''
+    def out = "${meta.sample}.md.${params.fq2bam_intermediate_fmt}"
+    def table = bqsrArgs(meta, vcfs, intervals, out) ? "touch ${meta.sample}.table" : ''
     """
-    touch ${meta.sample}.md.cram ${meta.sample}.md.cram.crai ${meta.sample}.duplicate-metrics.txt
+    touch ${out} ${out}.${params.fq2bam_intermediate_fmt == 'bam' ? 'bai' : 'crai'} ${meta.sample}.duplicate-metrics.txt
     printf 'chrT\\t500\\t0\\t0\\n*\\t0\\t0\\t0\\n' > ${meta.sample}.fq2bam.idxstats
     mkdir ${meta.sample}_qc_metrics
     ${table}
@@ -71,7 +74,7 @@ process PARABRICKS_MARKDUP {
 def markdupArgs(Map meta, Map opts) {
     def a = []
     a << "--in-bam ${meta.sample}.qsorted.bam"
-    a << "--out-bam ${meta.sample}.md.cram"
+    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'cram'}"
     a << "--out-duplicate-metrics ${meta.sample}.duplicate-metrics.txt"
     a << "--optical-duplicate-pixel-distance ${opts.optical_distance}"
     if (asList(meta.lane_single_end).any() && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
@@ -84,10 +87,10 @@ def markdupArgs(Map meta, Map opts) {
     a.join(' ')
 }
 
-def bqsrArgs(Map meta, Object vcfs, Object intervals) {
+def bqsrArgs(Map meta, Object vcfs, Object intervals, Object alignment) {
     def sites = asList(vcfs).collect { it.toString() }.findAll { it.endsWith('.vcf.gz') }
     if (!sites) return ''
-    def a = ["--in-bam ${meta.sample}.md.cram"]
+    def a = ["--in-bam ${alignment}"]
     sites.each { a << "--knownSites ${it}" }
     def iv = asList(intervals)
     if (iv) a << "--interval-file ${iv[0]}"

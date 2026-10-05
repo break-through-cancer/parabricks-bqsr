@@ -22,4 +22,24 @@ nextflow_process {
             assert file(process.out.idxstats[0][1]).name == 'S1.fq2bam.idxstats'
         }
     }
+
+    test("a BAM intermediate emits S.md.bam and its .bai") {
+        when {
+            params { fq2bam_intermediate_fmt = 'bam' }
+            process { """
+            def f = "\${projectDir}/tests/fixtures"
+            input[0] = [[sample: 'S1', patient: 'P1', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']],
+                        [file("\$f/fastq/S1_L1_R1.fastq.gz"), file("\$f/fastq/S1_L1_R2.fastq.gz")]]
+            input[1] = [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]
+            input[2] = file("\$f/genome/bwa")
+            input[3] = [[file("\$f/genome/known_sites.vcf.gz")], [file("\$f/genome/known_sites.vcf.gz.tbi")]]
+            input[4] = file("\$f/genome/intervals.bed")
+        """ }
+        }
+        then {
+            assert process.success
+            assert file(process.out.cram[0][1]).name == 'S1.md.bam'
+            assert file(process.out.cram[0][2]).name == 'S1.md.bam.bai'
+        }
+    }
 }

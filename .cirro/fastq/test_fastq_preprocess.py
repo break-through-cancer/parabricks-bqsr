@@ -248,3 +248,13 @@ def test_singleton_named_in_cirros_file_list_column_is_resolved_next_to_its_mate
     ])
     sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
     assert sorted(zip(sheet["fastq_1"], sheet["fastq_2"])) == [(f"{d}/S1_R1.fastq.gz", f"{d}/S1_R2.fastq.gz"), (f"{d}/S1_singletons.fastq.gz", "")]
+
+
+def test_form_offers_the_fq2bam_intermediate_format_cram_by_default_and_maps_it():
+    import json
+    here = pathlib.Path(__file__).parent
+    advanced = json.loads((here / "process-form.json").read_text())["form"]["properties"]["advanced"]["properties"]
+    field = advanced["fq2bam_intermediate_fmt"]
+    assert field["default"] == "cram" and field["enum"] == ["cram", "bam"]
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["fq2bam_intermediate_fmt"] == "$.dataset.params.advanced.fq2bam_intermediate_fmt"

@@ -138,6 +138,7 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--fq2bam_gpus` | `2` | GPUs for alignment, 1–4 (2 is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; set 1 to minimise cost). CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB (1 GPU: 16/64; 2: 24/88, two jobs fit a g5.12xlarge; 4: 48/176). |
 | `--fq2bam_low_memory` | `false` | `--low-memory` for fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x sample. Turn on if a smaller GPU runs out of memory. |
 | `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Turning it off made no measurable difference on one GPU; not shown on the Cirro form. |
+| `--fq2bam_intermediate_fmt` | `cram` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `cram` or `bam`. Not published; final outputs follow `--output_fmt`. Under A/B test: BAM may shorten fq2bam's write phase. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
