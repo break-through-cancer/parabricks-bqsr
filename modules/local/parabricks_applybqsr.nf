@@ -1,3 +1,5 @@
+include { pbrunFunction } from './pbrun_wrapper'
+
 process PARABRICKS_APPLYBQSR {
     tag "${meta.sample}"
     stageInMode 'copy'
@@ -19,6 +21,7 @@ process PARABRICKS_APPLYBQSR {
         [cpus: task.cpus, num_gpus: task.accelerator ? task.accelerator.request : 1])
     """
     set -euo pipefail
+    ${pbrunFunction()}
     if command -v nvidia-smi >/dev/null 2>&1; then
         echo "GPU: \$(nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader | paste -sd ';' -)" >&2
     else

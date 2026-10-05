@@ -1,3 +1,4 @@
+include { pbrunFunction } from './pbrun_wrapper'
 include { fq2bamArgs; fq2bamResources } from './parabricks_fq2bam'
 
 process PARABRICKS_FQ2BAM_PART {
@@ -23,6 +24,7 @@ process PARABRICKS_FQ2BAM_PART {
     ])
     """
     set -euo pipefail
+    ${pbrunFunction()}
     if command -v nvidia-smi >/dev/null 2>&1; then
         echo "GPU: \$(nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader | paste -sd ';' -)" >&2
     else
