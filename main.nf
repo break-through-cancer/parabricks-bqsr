@@ -136,6 +136,10 @@ def validateParams() {
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
     if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"
+    if (params.fq2bam_memory_gb != null && params.fq2bam_memory_gb.toString() != '') {
+        def m = params.fq2bam_memory_gb.toString()
+        if (!m.isInteger() || !(m.toInteger() in 16..768)) error "Invalid fq2bam_memory_gb '${params.fq2bam_memory_gb}': must be an integer between 16 and 768"
+    }
     if (!(params.fq2bam_intermediate_fmt in ['cram', 'bam'])) error "Invalid fq2bam_intermediate_fmt '${params.fq2bam_intermediate_fmt}': must be 'cram' or 'bam'"
     if (!params.fq2bam_gpus.toString().isInteger() || !(params.fq2bam_gpus.toString().toInteger() in 1..4)) error "Invalid fq2bam_gpus '${params.fq2bam_gpus}': must be between 1 and 4"
     if (params.quantize_quals_enabled.toString() == 'true') {

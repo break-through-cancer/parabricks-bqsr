@@ -250,11 +250,18 @@ def test_singleton_named_in_cirros_file_list_column_is_resolved_next_to_its_mate
     assert sorted(zip(sheet["fastq_1"], sheet["fastq_2"])) == [(f"{d}/S1_R1.fastq.gz", f"{d}/S1_R2.fastq.gz"), (f"{d}/S1_singletons.fastq.gz", "")]
 
 
-def test_form_offers_the_fq2bam_intermediate_format_cram_by_default_and_maps_it():
+def test_form_does_not_expose_the_fq2bam_intermediate_format():
+    here = pathlib.Path(__file__).parent
+    assert "fq2bam_intermediate_fmt" not in (here / "process-form.json").read_text()
+    assert "fq2bam_intermediate_fmt" not in (here / "process-input.json").read_text()
+
+
+def test_form_offers_an_optional_fq2bam_memory_override_and_maps_it():
     import json
     here = pathlib.Path(__file__).parent
-    advanced = json.loads((here / "process-form.json").read_text())["form"]["properties"]["advanced"]["properties"]
-    field = advanced["fq2bam_intermediate_fmt"]
-    assert field["default"] == "cram" and field["enum"] == ["cram", "bam"]
+    advanced = json.loads((here / "process-form.json").read_text())["form"]["properties"]["advanced"]
+    field = advanced["properties"]["fq2bam_memory_gb"]
+    assert field["type"] == "integer" and field["minimum"] == 16 and field["maximum"] == 768
+    assert "default" not in field and "fq2bam_memory_gb" not in advanced.get("required", [])
     mapping = json.loads((here / "process-input.json").read_text())
-    assert mapping["fq2bam_intermediate_fmt"] == "$.dataset.params.advanced.fq2bam_intermediate_fmt"
+    assert mapping["fq2bam_memory_gb"] == "$.dataset.params.advanced.fq2bam_memory_gb"

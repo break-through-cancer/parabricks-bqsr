@@ -28,3 +28,10 @@ def test_cirro_runs_every_parabricks_process_on_demand_and_retries_memory_kills(
             block = gpu_block(proc, name)
             assert "PW_ONDEMAND_JOB_QUEUE" in block, (proc, name)
             assert "2147483647" in block, (proc, name)
+
+
+def test_fq2bam_memory_override_reaches_both_fq2bam_processes():
+    for name in ("parabricks_fq2bam.nf", "parabricks_fq2bam_part.nf"):
+        text = (ROOT / "modules" / "local" / name).read_text()
+        memory = [l for l in text.splitlines() if l.strip().startswith("memory")][0]
+        assert "params.fq2bam_memory_gb" in memory, f"{name}: {memory.strip()}"

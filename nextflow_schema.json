@@ -171,9 +171,15 @@
                 },
                 "fq2bam_intermediate_fmt": {
                     "type": "string",
-                    "default": "cram",
+                    "default": "bam",
                     "enum": ["cram", "bam"],
-                    "description": "Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr. Not published; final outputs follow --output_fmt."
+                    "description": "Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr. Not published; final outputs follow --output_fmt. BAM was 9% cheaper per 21x sample with identical results."
+                },
+                "fq2bam_memory_gb": {
+                    "type": "integer",
+                    "minimum": 16,
+                    "maximum": 768,
+                    "description": "Override fq2bam's first-attempt host memory (GB); retries multiply it by the attempt number. Unset: 44 GB per GPU, at least 64. For deep samples (about 60x and up), e.g. 176 with 2 GPUs."
                 }
             }
         },

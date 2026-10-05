@@ -276,15 +276,12 @@
             "default": false,
             "description": "One BWA stream per GPU. Off by default (faster; fits the A10G 24 GB). Turn on only if alignment runs out of GPU memory."
           },
-          "fq2bam_intermediate_fmt": {
-            "title": "Intermediate alignment format",
-            "type": "string",
-            "enum": [
-              "cram",
-              "bam"
-            ],
-            "default": "cram",
-            "description": "Format of the duplicate-marked alignment between alignment and BQSR (not published). Under test: BAM may be faster to write and read."
+          "fq2bam_memory_gb": {
+            "title": "fq2bam memory override (GB)",
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 768,
+            "description": "Leave empty for the default (44 GB per GPU, at least 64). For deep samples (about 60x and up) set e.g. 176 with 2 GPUs so the first attempt is not killed for memory. Retries double and triple it."
           }
         }
       }

@@ -17,15 +17,16 @@ nextflow_process {
         """ } }
         then {
             assert process.success
-            assert file(process.out.cram[0][1]).name == 'S1.md.cram'
+            assert file(process.out.cram[0][1]).name == 'S1.md.bam'
+            assert file(process.out.cram[0][2]).name == 'S1.md.bam.bai'
             assert file(process.out.table[0][1]).name == 'S1.table'
             assert file(process.out.idxstats[0][1]).name == 'S1.fq2bam.idxstats'
         }
     }
 
-    test("a BAM intermediate emits S.md.bam and its .bai") {
+    test("a CRAM intermediate emits S.md.cram and its .crai") {
         when {
-            params { fq2bam_intermediate_fmt = 'bam' }
+            params { fq2bam_intermediate_fmt = 'cram' }
             process { """
             def f = "\${projectDir}/tests/fixtures"
             input[0] = [[sample: 'S1', patient: 'P1', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']],
@@ -38,8 +39,8 @@ nextflow_process {
         }
         then {
             assert process.success
-            assert file(process.out.cram[0][1]).name == 'S1.md.bam'
-            assert file(process.out.cram[0][2]).name == 'S1.md.bam.bai'
+            assert file(process.out.cram[0][1]).name == 'S1.md.cram'
+            assert file(process.out.cram[0][2]).name == 'S1.md.cram.crai'
         }
     }
 }

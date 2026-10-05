@@ -11,7 +11,7 @@ nextflow_function {
         then {
             def a = function.result
             assert a.contains('--in-bam S6.qsorted.bam')
-            assert a.contains('--out-bam S6.md.cram')
+            assert a.contains('--out-bam S6.md.bam')
             assert a.contains('--out-duplicate-metrics S6.duplicate-metrics.txt')
             assert a.contains('--optical-duplicate-pixel-distance 100')
             assert a.contains('--gpusort') && a.contains('--gpuwrite')
@@ -34,11 +34,11 @@ nextflow_function {
         }
     }
 
-    test("a BAM intermediate writes S.md.bam") {
+    test("a CRAM intermediate writes S.md.cram") {
         when { function { """
             input[0] = [sample: 'S6', lane_single_end: [false, true]]
-            input[1] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, gpuwrite: true, intermediate_fmt: 'bam']
+            input[1] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, gpuwrite: true, intermediate_fmt: 'cram']
         """ } }
-        then { assert function.result.contains('--out-bam S6.md.bam ') }
+        then { assert function.result.contains('--out-bam S6.md.cram ') }
     }
 }

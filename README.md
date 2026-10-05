@@ -112,10 +112,37 @@ partial VCF overlap warns).
 
 ### GPU
 
-`PARABRICKS_FQ2BAM` requests `--fq2bam_gpus` GPUs (default 1); `PARABRICKS_APPLYBQSR`
+`PARABRICKS_FQ2BAM` requests `--fq2bam_gpus` GPUs (default 2); `PARABRICKS_APPLYBQSR`
 requests 1 (`pbrun applybqsr` accepts only 1 or 2). On AWS Batch, `accelerator` places
 the task on a GPU compute environment; with the local executor and Docker, `--gpus all`
 is added. Local runs need a Linux host with an NVIDIA GPU.
+
+### Settings by sequencing depth
+
+`fq2bam` is the costly step. Its host memory peaks in its last phase (duplicate marking,
+BQSR table, writing), and that peak grows with depth. `--fq2bam_gpus` and
+`--fq2bam_low_memory` change BWA speed and BWA memory; they do not change that peak. A
+memory kill restarts `fq2bam` from the beginning, and retries use 2× then 3× the memory.
+For deep samples, set `--fq2bam_memory_gb` (on Cirro: *fq2bam memory override*) so the
+first attempt succeeds.
+
+| Depth (WGS) | GPUs | Low-memory | `--fq2bam_memory_gb` | Basis |
+|---|---|---|---|---|
+| Low-pass (≤5x) | 1 | off | unset (64 GB) | Lowest cost. Not measured below 21x; memory is well below the 21x peak. |
+| About 20–30x | 2 (default) | off | unset (88 GB) | Measured at 21x: `fq2bam` 37.6 min, $0.77, peak 77 GB of 88. With 1 GPU: 48.8 min, $0.72. Near 30x the peak may pass 88 GB; the retry then uses 176 GB. |
+| About 60x | 2 | off | 176 | Not measured. The peak is expected well above 88 GB. |
+| About 100x and deeper | 2 | off | 176 or more | Measured at 105x with 1 GPU, low-memory on, 64 GB: BWA 5 h 15 min and sort 31 min completed, then the duplicate-marking phase was killed (Parabricks reported allocating above 91.4 GB); $6.09 lost. GATK MarkDuplicates on CPU peaked at 186 GB on the same sample. 176 GB is not yet tested. |
+
+Placement on g5: a g5.12xlarge has 4 GPUs, 48 vCPUs and 192 GB, and holds two default
+2-GPU jobs. Above about 92 GB, one 2-GPU job fills a g5.12xlarge or half a g5.24xlarge, so
+its hourly cost rises (about +43% per job on a g5.24xlarge). 4 GPUs get 176 GB by default
+on the same g5.12xlarge and align faster, but 4 GPUs with low-memory off run 8 BWA streams,
+which is untested at depth.
+
+Other measured results (21x, 2 GPUs): a BAM intermediate (`--fq2bam_intermediate_fmt`,
+default) cost 9% less than CRAM with identical tables and read counts; `--gpuwrite` made no
+difference; the CPU-mode sort that Parabricks uses when duplicate metrics are requested took
+about 40–65 s.
 
 ### Parameters
 
@@ -138,7 +165,8 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 | `--fq2bam_gpus` | `2` | GPUs for alignment, 1–4 (2 is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; set 1 to minimise cost). CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB (1 GPU: 16/64; 2: 24/88, two jobs fit a g5.12xlarge; 4: 48/176). |
 | `--fq2bam_low_memory` | `false` | `--low-memory` for fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x sample. Turn on if a smaller GPU runs out of memory. |
 | `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Turning it off made no measurable difference on one GPU; not shown on the Cirro form. |
-| `--fq2bam_intermediate_fmt` | `cram` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `cram` or `bam`. Not published; final outputs follow `--output_fmt`. Under A/B test: BAM may shorten fq2bam's write phase. |
+| `--fq2bam_intermediate_fmt` | `bam` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `bam` or `cram`. Not published; final outputs follow `--output_fmt`. BAM was 9% cheaper on a 21x sample with identical results (applybqsr 41% faster). Not shown on the Cirro form. |
+| `--fq2bam_memory_gb` | unset | Override `fq2bam`'s first-attempt host memory in GB (16–768); retries multiply it by the attempt number and `--memory-limit` stays at half. Unset: 44 GB per GPU, at least 64. See *Settings by sequencing depth*. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
@@ -219,7 +247,7 @@ on-demand GPU queue (`PW_ONDEMAND_JOB_QUEUE`) with retries on resource-related e
 custom genome: a BWA index dataset containing `genome.fasta`, optional known-sites VCFs
 from the references library under `germline_resource`, optional BED under `genome_bed`),
 output format, quantization, trimming, single-end duplicate marking, optical pixel
-distance and alignment GPUs. Read pairs come from Cirro's own pairing (`sampleIndex`). A
+distance, alignment GPUs, low-memory mode and an fq2bam memory override. Read pairs come from Cirro's own pairing (`sampleIndex`). A
 `fastq_singleton` column in the dataset's samplesheet adds that file to the sample as a
 single-end lane. Cirro ingest moves that column into the file list's `singleton` column and
 does not list the file itself (no read number, so no `paired_dnaseq` name pattern matches);

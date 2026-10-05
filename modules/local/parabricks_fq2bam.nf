@@ -4,8 +4,8 @@ process PARABRICKS_FQ2BAM {
     tag "${meta.sample}"
     stageInMode 'copy'
     container 'nvcr.io/nvidia/clara/clara-parabricks:4.7.1-1'
-    cpus { fq2bamResources(params.fq2bam_gpus).cpus }
-    memory { "${fq2bamResources(params.fq2bam_gpus).memory_gb * task.attempt} GB" }
+    cpus { fq2bamResources(params.fq2bam_gpus, params.fq2bam_memory_gb).cpus }
+    memory { "${fq2bamResources(params.fq2bam_gpus, params.fq2bam_memory_gb).memory_gb * task.attempt} GB" }
 
     input:
     tuple val(meta), path(reads, stageAs: 'reads/?/*')
@@ -85,7 +85,7 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     if (sites) a << "--out-recal-file ${meta.sample}.table"
     def iv = asList(intervals)
     if (iv) a << "--interval-file ${iv[0]}"
-    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'cram'}"
+    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'bam'}"
     a << "--out-duplicate-metrics ${meta.sample}.duplicate-metrics.txt"
     a << "--out-qc-metrics-dir ${meta.sample}_qc_metrics"
     a << "--optical-duplicate-pixel-distance ${opts.optical_distance}"
@@ -108,7 +108,8 @@ def fq2bamPerformanceArgs(Map opts, Boolean tumor) {
     a
 }
 
-def fq2bamResources(Object gpus) {
+def fq2bamResources(Object gpus, Object memory_gb) {
     def n = gpus.toString().toInteger()
-    [cpus: Math.max(16, 12 * n), memory_gb: Math.max(64, 44 * n)]
+    def override = memory_gb == null ? '' : memory_gb.toString()
+    [cpus: Math.max(16, 12 * n), memory_gb: override ? override.toInteger() : Math.max(64, 44 * n)]
 }

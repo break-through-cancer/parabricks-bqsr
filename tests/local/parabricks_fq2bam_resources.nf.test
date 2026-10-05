@@ -4,19 +4,27 @@ nextflow_function {
     function "fq2bamResources"
 
     test("1 GPU keeps today's 16 CPUs / 64 GB") {
-        when { function { "input[0] = 1" } }
+        when { function { "input[0] = 1; input[1] = null" } }
         then { assert function.result == [cpus: 16, memory_gb: 64] }
     }
     test("2 GPUs: 24 CPUs / 88 GB, so two jobs share a g5.12xlarge") {
-        when { function { "input[0] = 2" } }
+        when { function { "input[0] = 2; input[1] = null" } }
         then { assert function.result == [cpus: 24, memory_gb: 88] }
     }
     test("4 GPUs: 48 CPUs / 176 GB, a whole g5.12xlarge") {
-        when { function { "input[0] = 4" } }
+        when { function { "input[0] = 4; input[1] = null" } }
         then { assert function.result == [cpus: 48, memory_gb: 176] }
     }
     test("a GPU count given as a string (Cirro params) is accepted") {
-        when { function { "input[0] = '2'" } }
+        when { function { "input[0] = '2'; input[1] = ''" } }
         then { assert function.result == [cpus: 24, memory_gb: 88] }
+    }
+    test("fq2bam_memory_gb overrides the first-attempt memory; CPUs still follow the GPUs") {
+        when { function { "input[0] = 2; input[1] = 176" } }
+        then { assert function.result == [cpus: 24, memory_gb: 176] }
+    }
+    test("a memory override given as a string (Cirro params) is accepted") {
+        when { function { "input[0] = 1; input[1] = '120'" } }
+        then { assert function.result == [cpus: 16, memory_gb: 120] }
     }
 }

@@ -121,6 +121,18 @@ nextflow_pipeline {
         }
     }
 
+    test("a non-numeric fq2bam memory override fails at startup") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/modules/reference.fasta"; outdir = "${outputDir}/results"
+            fq2bam_memory_gb = 'lots'
+        } }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains("Invalid fq2bam_memory_gb 'lots': must be an integer between 16 and 768")
+        }
+    }
+
     test("missing --input fails naming the parameter") {
         when {
             params {

@@ -74,7 +74,7 @@ process PARABRICKS_MARKDUP {
 def markdupArgs(Map meta, Map opts) {
     def a = []
     a << "--in-bam ${meta.sample}.qsorted.bam"
-    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'cram'}"
+    a << "--out-bam ${meta.sample}.md.${opts.intermediate_fmt ?: 'bam'}"
     a << "--out-duplicate-metrics ${meta.sample}.duplicate-metrics.txt"
     a << "--optical-duplicate-pixel-distance ${opts.optical_distance}"
     if (asList(meta.lane_single_end).any() && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'

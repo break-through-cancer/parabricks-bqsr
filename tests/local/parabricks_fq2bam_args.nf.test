@@ -18,7 +18,7 @@ nextflow_function {
             assert a.contains('--knownSites known_sites/1/x.vcf.gz --knownSites known_sites/2/y.vcf.gz')
             assert !a.contains('.tbi')
             assert a.contains('--out-recal-file S1.table') && a.contains('--interval-file i.bed')
-            assert a.contains('--out-bam S1.md.cram') && a.contains('--out-duplicate-metrics S1.duplicate-metrics.txt')
+            assert a.contains('--out-bam S1.md.bam') && a.contains('--out-duplicate-metrics S1.duplicate-metrics.txt')
             assert a.contains('--bwa-options="-K 100000000 -Y -B 3"')
             assert a.contains('--memory-limit 32') && a.contains('--num-gpus 1') && a.contains('--bwa-cpu-thread-pool 16')
             assert !a.contains('--markdups-single-ended-start-end')
@@ -108,18 +108,18 @@ nextflow_function {
         }
     }
 
-    test("a BAM intermediate writes S.md.bam; CRAM stays the default") {
+    test("a CRAM intermediate writes S.md.cram; BAM is the default") {
         when { function { """
             input[0] = [sample: 'S7', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']]
             input[1] = ['a.fq.gz', 'b.fq.gz']
             input[2] = []
             input[3] = []
             input[4] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: true,
-                        intermediate_fmt: 'bam']
+                        intermediate_fmt: 'cram']
         """ } }
         then {
-            assert function.result.contains('--out-bam S7.md.bam ')
-            assert !function.result.contains('.md.cram')
+            assert function.result.contains('--out-bam S7.md.cram ')
+            assert !function.result.contains('.md.bam')
         }
     }
 }
