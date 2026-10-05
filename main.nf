@@ -47,7 +47,8 @@ workflow {
             .map { sample, metas, reads ->
                 def ordered = [metas, reads].transpose().sort { it[0].lane.toString() }
                 def m = ordered[0][0]
-                [[sample: m.sample, patient: m.patient, status: m.status, single_end: m.single_end,
+                [[sample: m.sample, patient: m.patient, status: m.status,
+                  single_end: ordered.every { it[0].single_end }, lane_single_end: ordered.collect { it[0].single_end },
                   read_groups: ordered.collect { it[0].read_group }], ordered.collectMany { it[1] }]
             }
 

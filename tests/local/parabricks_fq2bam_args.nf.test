@@ -76,4 +76,21 @@ nextflow_function {
         """ } }
         then { assert function.result.contains('--gpuwrite --gpusort --low-memory') }
     }
+
+    test("a sample with paired lanes and a singleton lane gets --in-fq and --in-se-fq in one call") {
+        when { function { """
+            input[0] = [sample: 'S6', status: 0, single_end: false, lane_single_end: [false, true],
+                        read_groups: ['@RG\\\\tID:P', '@RG\\\\tID:S']]
+            input[1] = ['p1.fq.gz', 'p2.fq.gz', 's.fq.gz']
+            input[2] = []
+            input[3] = []
+            input[4] = [optical_distance: 100, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: true]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--in-fq p1.fq.gz p2.fq.gz "@RG\\tID:P"')
+            assert a.contains('--in-se-fq s.fq.gz "@RG\\tID:S"')
+            assert a.contains('--markdups-single-ended-start-end')
+        }
+    }
 }

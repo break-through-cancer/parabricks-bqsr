@@ -59,6 +59,21 @@ nextflow_pipeline {
             assert file("${outputDir}/results/preprocessing/markduplicates/S2/S2.md.cram").exists()
         }
     }
+    test("a sample with paired lanes and a singleton lane aligns in one fq2bam call") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq_mixed.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('FASTP') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 1
+        }
+    }
+
     test("a mismatched BWA index stops the run before any task") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'

@@ -62,9 +62,6 @@ def checkFastqSamples(List rows) {
     rows.groupBy { it[0].sample }.each { sample, lanes ->
         if (lanes.collect { it[0].patient }.unique().size() > 1) error "Sample '${sample}' has more than one patient"
         if (lanes.collect { it[0].status }.unique().size() > 1) error "Sample '${sample}' has more than one status"
-        if (lanes.collect { it[0].single_end }.unique().size() > 1) {
-            error "Sample '${sample}' mixes paired-end and single-end lanes; this is not supported until a single fq2bam call is validated with both"
-        }
         lanes.countBy { it[0].lane }.findAll { _lane, n -> n > 1 }.each { lane, _n ->
             error "Sample '${sample}' has lane '${lane}' more than once"
         }

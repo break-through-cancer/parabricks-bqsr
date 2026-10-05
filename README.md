@@ -61,8 +61,9 @@ One row per lane. See `assets/samplesheet_fastq.csv`.
 Read groups follow nf-core/sarek: `ID` and `PU` are `<flowcell>.<sample>.<lane>` (flowcell
 from the first Illumina read header, `unknown` otherwise), `SM` is `<patient>_<sample>`,
 `LB` is `<sample>`, `PL` is `--seq_platform`. All lanes of a sample go into one `fq2bam`
-call, giving one alignment and one BQSR table per sample. A sample cannot mix paired-end
-and single-end lanes.
+call, giving one alignment and one BQSR table per sample. A sample may mix paired lanes and
+single-end lanes (e.g. singletons left over from a BAM-to-FASTQ conversion); they share the
+sample's `SM` and `LB`, and `--markdups_se_mode` applies to the single-end reads.
 
 ### Alignment + table samplesheet
 
@@ -212,7 +213,9 @@ on-demand GPU queue (`PW_ONDEMAND_JOB_QUEUE`) with retries on resource-related e
 custom genome: a BWA index dataset containing `genome.fasta`, optional known-sites VCFs
 from the references library under `germline_resource`, optional BED under `genome_bed`),
 output format, quantization, trimming, single-end duplicate marking, optical pixel
-distance and alignment GPUs.
+distance and alignment GPUs. Read pairs come from Cirro's own pairing (`sampleIndex`). A
+`fastq_singleton` column in the dataset's samplesheet adds that file to the sample as a
+single-end lane; it is found in the dataset's file list, or next to the sample's read 1.
 
 **Registration settings:** repository `break-through-cancer/parabricks-bqsr`, entry
 script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
@@ -230,8 +233,8 @@ mapping can reuse `sarek_align`'s patterns:
    - V2: a single-lane sample compared with `sarek_align` on the same FASTQs (read groups,
      mapping and duplicate rates, identical table, matching pre-BQSR records).
    - V3: a single-end sample with both duplicate-marking modes.
-   - V4: one `fq2bam` call with paired and single-end inputs (decides whether the
-     mixed-sample rejection can be lifted).
+   - V4: one `fq2bam` call with paired and single-end inputs (paired + singleton samples;
+     if pbrun rejects mixing `--in-fq` and `--in-se-fq`, those samples fail with a pbrun error).
    - V5: a canine custom genome with and without known sites.
    - V6: low-pass tables (observations per read group below 1x).
    - V7: quantization parity with GATK `ApplyBQSR --static-quantized-quals`.

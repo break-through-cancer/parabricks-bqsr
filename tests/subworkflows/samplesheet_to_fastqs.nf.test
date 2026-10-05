@@ -25,10 +25,15 @@ nextflow_workflow {
             assert meta.read_group.startsWith('@RG\\tID:unknown.S3.1\\t')
         }
     }
-    test("mixed paired and single-end lanes in one sample are rejected") {
+    test("a sample may mix paired lanes and a single-end (singleton) lane") {
         when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/mixed_pe_se.csv\"" } }
-        then { assert workflow.failed; assert workflow.stdout.join('\n').contains("Sample 'S1' mixes paired-end and single-end lanes") }
+        then {
+            assert workflow.success
+            def lanes = workflow.out.lanes.collect { it[0] }
+            assert lanes*.single_end.sort() == [false, true] && lanes.every { it.n_lanes == 2 }
+        }
     }
+
     test("duplicate sample and lane is rejected") {
         when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/duplicate_lane.csv\"" } }
         then { assert workflow.failed; assert workflow.stdout.join('\n').contains("Sample 'S1' has lane '1' more than once") }

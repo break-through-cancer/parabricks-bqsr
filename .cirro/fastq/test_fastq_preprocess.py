@@ -202,3 +202,39 @@ def test_igenomes_branch_offers_three_interval_modes_and_a_custom_bed():
     custom = [b for b in igenomes["dependencies"]["intervals_mode"]["oneOf"] if b["properties"]["intervals_mode"]["enum"] == ["custom"]][0]
     bed = custom["properties"]["custom_intervals"]
     assert bed["pathType"] == "references" and bed["useS3Path"] is True and custom["required"] == ["custom_intervals"]
+
+
+def test_singleton_found_in_the_file_list_becomes_a_single_end_row_and_is_not_paired():
+    f = files([(0, "S1", "1", 1, "s3://b/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/S1_R2.fq.gz"),
+               (1, "S1", "1", 1, "s3://b/S1__singletons.fastq.gz")])
+    meta = pd.DataFrame([{"sample": "S1", "fastq_singleton": "S1__singletons.fastq.gz"}])
+    sheet = build_fastq_samplesheet(f, meta, LOG)
+    assert sorted(zip(sheet["fastq_1"], sheet["fastq_2"])) == [("s3://b/S1_R1.fq.gz", "s3://b/S1_R2.fq.gz"), ("s3://b/S1__singletons.fastq.gz", "")]
+
+
+def test_singleton_missing_from_the_file_list_is_resolved_next_to_fastq_1():
+    f = files([(0, "S1", "1", 1, "s3://b/d/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/d/S1_R2.fq.gz")])
+    meta = pd.DataFrame([{"sample": "S1", "fastq_singleton": "S1__singletons.fastq.gz"}])
+    assert "s3://b/d/S1__singletons.fastq.gz" in build_fastq_samplesheet(f, meta, LOG)["fastq_1"].tolist()
+
+
+def test_singleton_with_an_unset_read_number_is_still_handled():
+    f = files([(0, "S1", "1", 1, "s3://b/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/S1_R2.fq.gz"),
+               (1, "S1", "1", None, "s3://b/S1__singletons.fastq.gz")])
+    meta = pd.DataFrame([{"sample": "S1", "fastq_singleton": "S1__singletons.fastq.gz"}])
+    assert len(build_fastq_samplesheet(f, meta, LOG)) == 2
+
+
+def test_samples_without_a_singleton_are_unchanged():
+    f = files([(0, "S1", "1", 1, "s3://b/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/S1_R2.fq.gz"),
+               (1, "S2", "1", 1, "s3://b/S2_R1.fq.gz"), (1, "S2", "1", 2, "s3://b/S2_R2.fq.gz")])
+    meta = pd.DataFrame([{"sample": "S1", "fastq_singleton": "S1__singletons.fastq.gz"}, {"sample": "S2", "fastq_singleton": None}])
+    sheet = build_fastq_samplesheet(f, meta, LOG)
+    assert len(sheet[sheet["sample"] == "S2"]) == 1 and len(sheet[sheet["sample"] == "S1"]) == 2
+
+
+def test_singleton_for_a_sample_without_fastqs_is_an_error():
+    f = files([(0, "S1", "1", 1, "s3://b/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/S1_R2.fq.gz")])
+    meta = pd.DataFrame([{"sample": "S9", "fastq_singleton": "S9__singletons.fastq.gz"}])
+    with pytest.raises(ValueError, match="S9"):
+        build_fastq_samplesheet(f, meta, LOG)

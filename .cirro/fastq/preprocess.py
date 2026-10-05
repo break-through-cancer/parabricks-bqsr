@@ -6,6 +6,15 @@ COLUMNS = ["patient", "sample", "status", "lane", "fastq_1", "fastq_2"]
 FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals", "intervals_mode")
 
 
+def singleton_files(samplesheet: pd.DataFrame) -> dict:
+    """sample -> singleton FASTQ file name, from the dataset samplesheet's optional fastq_singleton column."""
+    if "fastq_singleton" not in samplesheet.columns:
+        return {}
+    named = samplesheet.dropna(subset=["fastq_singleton"])
+    return {row["sample"]: str(row["fastq_singleton"]).rsplit("/", 1)[-1]
+            for _, row in named.iterrows() if str(row["fastq_singleton"]).strip()}
+
+
 def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log) -> pd.DataFrame:
     """One row per FASTQ pair, as sarek_align's make_manifest: Cirro's ingest already pairs mates
     (sampleIndex), so rows are keyed by sampleIndex/sample/lane/dataset and read 1/2 become
@@ -13,6 +22,10 @@ def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log)
     its read 2 in a paired sample, is an error."""
     if "readType" in files.columns:
         files = files.loc[files["readType"].fillna("R") == "R"]
+    original_files = list(files["file"])
+    singletons = singleton_files(samplesheet)
+    if singletons:
+        files = files.loc[~files["file"].str.rsplit("/", n=1).str[-1].isin(set(singletons.values()))]
     if files.empty:
         raise ValueError("No FASTQ files found in the input dataset(s)")
     if files["read"].isna().any():
@@ -33,6 +46,14 @@ def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log)
             problems.append(f"{sample}: no mate found for {', '.join(mates.values())}")
             continue
         rows.append(dict(sample=sample, lane=lane, fastq_1=mates.get(1, ""), fastq_2=mates.get(2, "")))
+    for sample, name in sorted(singletons.items()):
+        own = [r for r in rows if r["sample"] == sample]
+        if not own:
+            problems.append(f"{sample}: fastq_singleton {name} given but the sample has no paired FASTQs")
+            continue
+        listed = [p for p in original_files if p.rsplit("/", 1)[-1] == name]
+        path = listed[0] if listed else f"{own[0]['fastq_1'].rsplit('/', 1)[0]}/{name}"
+        rows.append(dict(sample=sample, lane="singleton", fastq_1=path, fastq_2=""))
     if problems:
         raise ValueError("Cannot build FASTQ pairs:\n  " + "\n  ".join(problems))
 

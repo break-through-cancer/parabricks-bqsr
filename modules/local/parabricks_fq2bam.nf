@@ -55,11 +55,14 @@ def asList(Object x) {
 
 def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) {
     def r = asList(reads).collect { it.toString() }
-    def per = meta.single_end ? 1 : 2
+    def lane_se = meta.lane_single_end ?: meta.read_groups.collect { meta.single_end }
     def a = []
+    def offset = 0
     meta.read_groups.eachWithIndex { rg, i ->
-        def files = r.subList(i * per, i * per + per).join(' ')
-        a << (meta.single_end ? "--in-se-fq ${files} \"${rg}\"" : "--in-fq ${files} \"${rg}\"")
+        def per = lane_se[i] ? 1 : 2
+        def files = r.subList(offset, offset + per).join(' ')
+        offset += per
+        a << (lane_se[i] ? "--in-se-fq ${files} \"${rg}\"" : "--in-fq ${files} \"${rg}\"")
     }
     def sites = asList(vcfs).collect { it.toString() }.findAll { it.endsWith('.vcf.gz') }
     sites.each { a << "--knownSites ${it}" }
@@ -77,7 +80,7 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     a << '--gpusort'
     if (opts.low_memory) a << '--low-memory'
     a << '--monitor-usage'
-    if (meta.single_end && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
+    if (lane_se.any() && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
     a << "--num-gpus ${opts.num_gpus}"
     a << '--tmp-dir .'
     a.join(' ')
