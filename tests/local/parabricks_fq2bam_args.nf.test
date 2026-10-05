@@ -77,7 +77,7 @@ nextflow_function {
         then { assert function.result.contains('--gpuwrite --gpusort --low-memory') }
     }
 
-    test("a sample with paired lanes and a singleton lane gets --in-fq and --in-se-fq in one call") {
+    test("paired and single-end lanes in one call is an error, as fq2bam takes one input kind") {
         when { function { """
             input[0] = [sample: 'S6', status: 0, single_end: false, lane_single_end: [false, true],
                         read_groups: ['@RG\\\\tID:P', '@RG\\\\tID:S']]
@@ -86,11 +86,25 @@ nextflow_function {
             input[3] = []
             input[4] = [optical_distance: 100, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: true]
         """ } }
+        then { assert function.failed }
+    }
+
+    test("align-only part: no duplicate marking, table, intervals or QC; named BAM output") {
+        when { function { """
+            input[0] = [sample: 'S6', status: 0, single_end: true, lane_single_end: [true], read_groups: ['@RG\\\\tID:S'], part: 'singleton']
+            input[1] = ['s.fq.gz']
+            input[2] = ['sites.vcf.gz']
+            input[3] = ['regions.bed']
+            input[4] = [optical_distance: 100, markdups_se_mode: 'start-end', cpus: 8, memory_gb: 32, num_gpus: 1, low_memory: false, gpuwrite: true,
+                        align_only: true, out_bam: 'S6.singleton.bam']
+        """ } }
         then {
             def a = function.result
-            assert a.contains('--in-fq p1.fq.gz p2.fq.gz "@RG\\tID:P"')
             assert a.contains('--in-se-fq s.fq.gz "@RG\\tID:S"')
-            assert a.contains('--markdups-single-ended-start-end')
+            assert a.contains('--no-markdups')
+            assert a.contains('--out-bam S6.singleton.bam')
+            ['--knownSites', '--out-recal-file', '--interval-file', '--out-duplicate-metrics', '--out-qc-metrics-dir',
+             '--optical-duplicate-pixel-distance', '--markdups-single-ended-start-end'].each { assert !a.contains(it) }
         }
     }
 }

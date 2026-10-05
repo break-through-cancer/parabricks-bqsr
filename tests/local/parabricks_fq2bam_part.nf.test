@@ -1,0 +1,21 @@
+nextflow_process {
+    name "Test PARABRICKS_FQ2BAM_PART (stub)"
+    script "modules/local/parabricks_fq2bam_part.nf"
+    process "PARABRICKS_FQ2BAM_PART"
+    options "-stub"
+    config "tests/local/parabricks_markdup.nf.config"
+
+    test("stub emits one BAM named by sample and part") {
+        when { process { """
+            def f = "\${projectDir}/tests/fixtures"
+            input[0] = [[sample: 'S1', status: 0, single_end: true, lane_single_end: [true], read_groups: ['@RG\\\\tID:S'], part: 'singleton'],
+                        [file("\$f/fastq/S2_L1.fastq.gz")]]
+            input[1] = [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]
+            input[2] = file("\$f/genome/bwa")
+        """ } }
+        then {
+            assert process.success
+            assert file(process.out.bam[0][1]).name == 'S1.singleton.bam'
+        }
+    }
+}

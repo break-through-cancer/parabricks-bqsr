@@ -63,7 +63,12 @@ from the first Illumina read header, `unknown` otherwise), `SM` is `<patient>_<s
 `LB` is `<sample>`, `PL` is `--seq_platform`. All lanes of a sample go into one `fq2bam`
 call, giving one alignment and one BQSR table per sample. A sample may mix paired lanes and
 single-end lanes (e.g. singletons left over from a BAM-to-FASTQ conversion); they share the
-sample's `SM` and `LB`, and `--markdups_se_mode` applies to the single-end reads.
+sample's `SM` and `LB`, and `--markdups_se_mode` applies to the single-end reads. `fq2bam`
+takes one input kind per call, so such a sample is aligned in two `fq2bam` calls (paired,
+single-end) without duplicate marking. The two are merged and queryname-sorted (`bamsort`), then
+duplicates are marked once across all reads (`markdup`, matching `fq2bam`'s GATK
+MarkDuplicates behaviour). The BQSR table (`bqsr`) and QC metrics (`collectmultiplemetrics`)
+are built from that file. Outputs match a single `fq2bam` call.
 
 ### Alignment + table samplesheet
 
@@ -215,7 +220,9 @@ from the references library under `germline_resource`, optional BED under `genom
 output format, quantization, trimming, single-end duplicate marking, optical pixel
 distance and alignment GPUs. Read pairs come from Cirro's own pairing (`sampleIndex`). A
 `fastq_singleton` column in the dataset's samplesheet adds that file to the sample as a
-single-end lane; it is found in the dataset's file list, or next to the sample's read 1.
+single-end lane. Cirro ingest moves that column into the file list's `singleton` column and
+does not list the file itself (no read number, so no `paired_dnaseq` name pattern matches);
+the file is resolved next to the sample's read 1.
 
 **Registration settings:** repository `break-through-cancer/parabricks-bqsr`, entry
 script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
@@ -233,8 +240,9 @@ mapping can reuse `sarek_align`'s patterns:
    - V2: a single-lane sample compared with `sarek_align` on the same FASTQs (read groups,
      mapping and duplicate rates, identical table, matching pre-BQSR records).
    - V3: a single-end sample with both duplicate-marking modes.
-   - V4: one `fq2bam` call with paired and single-end inputs (paired + singleton samples;
-     if pbrun rejects mixing `--in-fq` and `--in-se-fq`, those samples fail with a pbrun error).
+   - V4: paired + singleton samples (`fq2bam` rejects `--in-fq` with `--in-se-fq` in one
+     call, so these go through the split path: read counts, `markdup` output sort order,
+     `bqsr` and `collectmultiplemetrics` on CRAM).
    - V5: a canine custom genome with and without known sites.
    - V6: low-pass tables (observations per read group below 1x).
    - V7: quantization parity with GATK `ApplyBQSR --static-quantized-quals`.

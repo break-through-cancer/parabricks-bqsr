@@ -1,0 +1,27 @@
+nextflow_process {
+    name "Test PARABRICKS_MARKDUP (stub)"
+    script "modules/local/parabricks_markdup.nf"
+    process "PARABRICKS_MARKDUP"
+    options "-stub"
+    config "tests/local/parabricks_markdup.nf.config"
+
+    test("stub emits the same outputs as fq2bam: CRAM, index, table, idxstats, duplicate metrics, QC metrics") {
+        when { process { """
+            def f = "\${projectDir}/tests/fixtures"
+            input[0] = [[sample: 'S1', patient: 'P1', status: 0, single_end: false, lane_single_end: [false, true]],
+                        [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]]
+            input[1] = [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]
+            input[2] = [[file("\$f/genome/known_sites.vcf.gz")], [file("\$f/genome/known_sites.vcf.gz.tbi")]]
+            input[3] = file("\$f/genome/intervals.bed")
+        """ } }
+        then {
+            assert process.success
+            assert file(process.out.cram[0][1]).name == 'S1.md.cram'
+            assert file(process.out.cram[0][2]).name == 'S1.md.cram.crai'
+            assert file(process.out.table[0][1]).name == 'S1.table'
+            assert file(process.out.idxstats[0][1]).name == 'S1.fq2bam.idxstats'
+            assert file(process.out.duplicate_metrics[0][1]).name == 'S1.duplicate-metrics.txt'
+            assert file(process.out.qc_metrics[0][1]).name == 'S1_qc_metrics'
+        }
+    }
+}

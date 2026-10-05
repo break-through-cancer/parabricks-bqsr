@@ -1,0 +1,30 @@
+nextflow_function {
+    name "Test bqsrArgs"
+    script "modules/local/parabricks_markdup.nf"
+    function "bqsrArgs"
+
+    test("known sites (VCFs only) and intervals build the table") {
+        when { function { """
+            input[0] = [sample: 'S6']
+            input[1] = ['known_sites/1/x.vcf.gz', 'known_sites/2/y.vcf.gz.tbi']
+            input[2] = 'i.bed'
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--in-bam S6.md.cram')
+            assert a.contains('--knownSites known_sites/1/x.vcf.gz')
+            assert !a.contains('.tbi')
+            assert a.contains('--interval-file i.bed')
+            assert a.contains('--out-recal-file S6.table')
+        }
+    }
+
+    test("no known sites: no table") {
+        when { function { """
+            input[0] = [sample: 'S6']
+            input[1] = []
+            input[2] = []
+        """ } }
+        then { assert function.result == '' }
+    }
+}

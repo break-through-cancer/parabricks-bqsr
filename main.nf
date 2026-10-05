@@ -7,6 +7,8 @@ include { PREPARE_KNOWN_SITES                       } from './subworkflows/local
 include { READ_CHECKS; fastpReadCount               } from './subworkflows/local/read_checks/main'
 include { FASTP                                     } from './modules/local/fastp'
 include { PARABRICKS_FQ2BAM                         } from './modules/local/parabricks_fq2bam'
+include { PARABRICKS_FQ2BAM_PART                    } from './modules/local/parabricks_fq2bam_part'
+include { PARABRICKS_MARKDUP                        } from './modules/local/parabricks_markdup'
 include { PARABRICKS_APPLYBQSR                      } from './modules/local/parabricks_applybqsr'
 include { QUANTIZE_QUALS                            } from './modules/local/quantize_quals'
 include { SAMTOOLS_FINALIZE                         } from './modules/local/samtools_finalize'
@@ -53,24 +55,39 @@ workflow {
             }
 
         PREPARE_KNOWN_SITES(refs.known_sites)
-        PARABRICKS_FQ2BAM(
-            sample_reads, ref_ch, Channel.value(file(refs.bwa_index, checkIfExists: true)),
-            PREPARE_KNOWN_SITES.out.known_sites, Channel.value(refs.intervals ? file(refs.intervals, checkIfExists: true) : [])
+        def bwa_index_ch = channel.value(file(refs.bwa_index, checkIfExists: true))
+        def intervals_ch = channel.value(refs.intervals ? file(refs.intervals, checkIfExists: true) : [])
+        by_kind = sample_reads.branch { meta, _reads ->
+            mixed: meta.lane_single_end.any() && !meta.lane_single_end.every()
+            single: true
+        }
+        PARABRICKS_FQ2BAM(by_kind.single, ref_ch, bwa_index_ch, PREPARE_KNOWN_SITES.out.known_sites, intervals_ch)
+
+        PARABRICKS_FQ2BAM_PART(by_kind.mixed.flatMap { meta, reads -> splitByReadKind(meta, reads) }, ref_ch, bwa_index_ch)
+        PARABRICKS_MARKDUP(
+            PARABRICKS_FQ2BAM_PART.out.bam
+                .map { meta, bam -> [groupKey(meta.sample, 2), meta.parent, bam] }
+                .groupTuple()
+                .map { _sample, parents, bams -> [parents[0], bams.sort { bam -> bam.name }] },
+            ref_ch, PREPARE_KNOWN_SITES.out.known_sites, intervals_ch
         )
+        aligned_cram = PARABRICKS_FQ2BAM.out.cram.mix(PARABRICKS_MARKDUP.out.cram)
+        aligned_table = PARABRICKS_FQ2BAM.out.table.mix(PARABRICKS_MARKDUP.out.table)
 
         if (bqsr) {
             PARABRICKS_APPLYBQSR(
-                PARABRICKS_FQ2BAM.out.cram.join(PARABRICKS_FQ2BAM.out.table, failOnMismatch: true)
+                aligned_cram.join(aligned_table, failOnMismatch: true)
                     .map { meta, cram, crai, table -> [[sample: meta.sample], cram, crai, table] },
                 ref_ch
             )
             to_finish = PARABRICKS_APPLYBQSR.out.bam.map { meta, bam -> [meta + [suffix: 'recal'], bam] }
         } else {
-            to_finish = PARABRICKS_FQ2BAM.out.cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] }
+            to_finish = aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] }
         }
-        before_idxstats = PARABRICKS_FQ2BAM.out.idxstats.map { meta, idx -> [[sample: meta.sample], idx] }
+        before_idxstats = PARABRICKS_FQ2BAM.out.idxstats.mix(PARABRICKS_MARKDUP.out.idxstats)
+            .map { meta, idx -> [[sample: meta.sample], idx] }
         extra_qc = FASTP.out.json.map { it[1] }
-            .mix(PARABRICKS_FQ2BAM.out.duplicate_metrics.map { it[1] })
+            .mix(PARABRICKS_FQ2BAM.out.duplicate_metrics.mix(PARABRICKS_MARKDUP.out.duplicate_metrics).map { _meta, metrics -> metrics })
     } else {
         fastq_counts = Channel.empty()
         SAMPLESHEET_TO_SAMPLES(params.input)
@@ -127,5 +144,22 @@ def validateParams() {
     }
     ['clip_r1', 'clip_r2', 'three_prime_clip_r1', 'three_prime_clip_r2', 'length_required'].each { p ->
         if (!params[p].toString().isInteger() || params[p].toString().toInteger() < 0) error "Invalid ${p} '${params[p]}': must be a non-negative integer"
+    }
+}
+
+def splitByReadKind(Map meta, Object reads) {
+    def files = reads instanceof List ? reads : [reads]
+    def lanes = []
+    def offset = 0
+    meta.lane_single_end.eachWithIndex { se, i ->
+        def per = se ? 1 : 2
+        lanes << [se: se, read_group: meta.read_groups[i], files: files.subList(offset, offset + per)]
+        offset += per
+    }
+    [false, true].collect { se ->
+        def own = lanes.findAll { lane -> lane.se == se }
+        [meta + [part: se ? 'singleton' : 'paired', single_end: se, lane_single_end: own.collect { lane -> lane.se },
+                 read_groups: own.collect { lane -> lane.read_group }, parent: meta],
+         own.collectMany { lane -> lane.files }]
     }
 }

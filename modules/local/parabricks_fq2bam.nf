@@ -56,6 +56,9 @@ def asList(Object x) {
 def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) {
     def r = asList(reads).collect { it.toString() }
     def lane_se = meta.lane_single_end ?: meta.read_groups.collect { meta.single_end }
+    if (lane_se.any() && !lane_se.every()) {
+        error "fq2bam takes either paired or single-end FASTQs per call; ${meta.sample} has both and must be aligned in parts"
+    }
     def a = []
     def offset = 0
     meta.read_groups.eachWithIndex { rg, i ->
@@ -63,6 +66,12 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
         def files = r.subList(offset, offset + per).join(' ')
         offset += per
         a << (lane_se[i] ? "--in-se-fq ${files} \"${rg}\"" : "--in-fq ${files} \"${rg}\"")
+    }
+    if (opts.align_only) {
+        a << '--no-markdups'
+        a << "--out-bam ${opts.out_bam}"
+        a.addAll(fq2bamPerformanceArgs(opts, meta.status == 1))
+        return a.join(' ')
     }
     def sites = asList(vcfs).collect { it.toString() }.findAll { it.endsWith('.vcf.gz') }
     sites.each { a << "--knownSites ${it}" }
@@ -73,17 +82,23 @@ def fq2bamArgs(Map meta, Object reads, Object vcfs, Object intervals, Map opts) 
     a << "--out-duplicate-metrics ${meta.sample}.duplicate-metrics.txt"
     a << "--out-qc-metrics-dir ${meta.sample}_qc_metrics"
     a << "--optical-duplicate-pixel-distance ${opts.optical_distance}"
-    a << "--bwa-options=\"-K 100000000 -Y${meta.status == 1 ? ' -B 3' : ''}\""
+    if (lane_se.any() && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
+    a.addAll(fq2bamPerformanceArgs(opts, meta.status == 1))
+    a.join(' ')
+}
+
+def fq2bamPerformanceArgs(Map opts, Boolean tumor) {
+    def a = []
+    a << "--bwa-options=\"-K 100000000 -Y${tumor ? ' -B 3' : ''}\""
     a << "--bwa-cpu-thread-pool ${opts.cpus}"
     a << "--memory-limit ${Math.max(1, (opts.memory_gb as long).intdiv(2))}"
     if (opts.gpuwrite) a << '--gpuwrite'
     a << '--gpusort'
     if (opts.low_memory) a << '--low-memory'
     a << '--monitor-usage'
-    if (lane_se.any() && opts.markdups_se_mode == 'start-end') a << '--markdups-single-ended-start-end'
     a << "--num-gpus ${opts.num_gpus}"
     a << '--tmp-dir .'
-    a.join(' ')
+    a
 }
 
 def fq2bamResources(Object gpus) {

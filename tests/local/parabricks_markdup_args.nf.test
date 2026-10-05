@@ -1,0 +1,36 @@
+nextflow_function {
+    name "Test markdupArgs"
+    script "modules/local/parabricks_markdup.nf"
+    function "markdupArgs"
+
+    test("matches fq2bam's duplicate marking: coordinate-order behaviour, optical distance, metrics, GPU sort") {
+        when { function { """
+            input[0] = [sample: 'S6', lane_single_end: [false, true]]
+            input[1] = [optical_distance: 100, markdups_se_mode: '5prime', cpus: 16, memory_gb: 64, gpuwrite: true]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--in-bam S6.qsorted.bam')
+            assert a.contains('--out-bam S6.md.cram')
+            assert a.contains('--out-duplicate-metrics S6.duplicate-metrics.txt')
+            assert a.contains('--optical-duplicate-pixel-distance 100')
+            assert a.contains('--gpusort') && a.contains('--gpuwrite')
+            assert a.contains('--num-worker-threads 16') && a.contains('--mem-limit 32')
+            assert !a.contains('--markdups-assume-sortorder-queryname')
+            assert !a.contains('--markdups-single-ended-start-end')
+        }
+    }
+
+    test("start-end single-end mode is passed through when the sample has a single-end lane") {
+        when { function { """
+            input[0] = [sample: 'S6', lane_single_end: [false, true]]
+            input[1] = [optical_distance: 2500, markdups_se_mode: 'start-end', cpus: 16, memory_gb: 64, gpuwrite: false]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('--markdups-single-ended-start-end')
+            assert a.contains('--optical-duplicate-pixel-distance 2500')
+            assert !a.contains('--gpuwrite')
+        }
+    }
+}

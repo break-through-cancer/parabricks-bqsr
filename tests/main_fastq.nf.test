@@ -59,18 +59,28 @@ nextflow_pipeline {
             assert file("${outputDir}/results/preprocessing/markduplicates/S2/S2.md.cram").exists()
         }
     }
-    test("a sample with paired lanes and a singleton lane aligns in one fq2bam call") {
+    test("a sample with paired lanes and a singleton lane: one fq2bam per input kind, then one markdup over all reads") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq_mixed.csv"; genome = 'null'
             ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
             bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
             outdir = "${outputDir}/results"
         } }
         then {
             assert workflow.success
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('FASTP') } == 2
-            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 1
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM_PART') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM ') } == 0
+            assert ok.count { it.startsWith('PARABRICKS_MARKDUP') } == 1
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 1
+            def out = "${outputDir}/results"
+            assert file("${out}/preprocessing/recal_table/S1/S1.table").exists()
+            assert file("${out}/reports/markduplicates/S1/S1.duplicate-metrics.txt").exists()
+            assert file("${out}/reports/parabricks_qc/S1/S1_qc_metrics").exists()
+            assert file("${out}/preprocessing/recalibrated/S1/S1.recal.cram").exists()
         }
     }
 

@@ -23,7 +23,7 @@ def parabricks_processes():
 
 def test_every_parabricks_process_requests_a_gpu():
     procs = parabricks_processes()
-    assert procs == ["PARABRICKS_APPLYBQSR", "PARABRICKS_FQ2BAM"]
+    assert procs == ["PARABRICKS_APPLYBQSR", "PARABRICKS_FQ2BAM", "PARABRICKS_FQ2BAM_PART", "PARABRICKS_MARKDUP"]
     for cfg in (flat_config(), flat_config("-c", ".cirro/fastq/process-compute.config")):
         for p in procs:
             assert re.search(rf"withName:{p}'\.accelerator = ", cfg), f"{p} has no accelerator"
