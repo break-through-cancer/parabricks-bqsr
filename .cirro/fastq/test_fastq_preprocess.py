@@ -121,7 +121,7 @@ def test_every_references_library_field_requests_an_s3_path():
                 yield from fields(value)
 
     refs = list(fields(form))
-    assert len(refs) == 3
+    assert len(refs) == 4
     assert all(f.get("useS3Path") is True for f in refs), [f["title"] for f in refs if not f.get("useS3Path")]
 
 
@@ -153,3 +153,42 @@ def test_form_offers_low_memory_off_by_default_and_hides_gpuwrite():
     assert advanced["fq2bam_low_memory"]["default"] is False
     assert "fq2bam_gpuwrite" not in form
     assert "fq2bam_gpuwrite" not in (here / "process-input.json").read_text()
+
+
+def test_igenomes_with_custom_intervals_uses_them():
+    p = apply_genome_params({"genome_source": "igenomes", "genome": "GATK.GRCh38",
+                             "intervals_mode": "custom", "custom_intervals": "s3://r/c/regions.bed"})
+    assert p["intervals"] == "s3://r/c/regions.bed" and "no_intervals" not in p
+    assert "intervals_mode" not in p and "custom_intervals" not in p
+
+
+def test_igenomes_intervals_none_sets_no_intervals():
+    p = apply_genome_params({"genome_source": "igenomes", "genome": "GATK.GRCh38", "intervals_mode": "none"})
+    assert p["no_intervals"] is True and "intervals" not in p
+
+
+def test_igenomes_default_intervals_leaves_the_genome_default():
+    p = apply_genome_params({"genome_source": "igenomes", "genome": "GATK.GRCh38", "intervals_mode": "gatk_calling_regions"})
+    assert "intervals" not in p and "no_intervals" not in p
+
+
+def test_igenomes_custom_intervals_without_a_file_is_an_error():
+    with pytest.raises(ValueError, match="custom intervals"):
+        apply_genome_params({"genome_source": "igenomes", "genome": "GATK.GRCh38", "intervals_mode": "custom"})
+
+
+def test_gpu_field_defaults_to_2_and_caps_at_4():
+    import json
+    adv = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["advanced"]["properties"]
+    assert adv["fq2bam_gpus"]["default"] == 2 and adv["fq2bam_gpus"]["maximum"] == 4
+
+
+def test_igenomes_branch_offers_three_interval_modes_and_a_custom_bed():
+    import json
+    form = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())
+    igenomes = form["form"]["properties"]["genome_selection"]["dependencies"]["genome_source"]["oneOf"][0]
+    mode = igenomes["properties"]["intervals_mode"]
+    assert mode["enum"] == ["gatk_calling_regions", "none", "custom"] and mode["default"] == "gatk_calling_regions"
+    custom = [b for b in igenomes["dependencies"]["intervals_mode"]["oneOf"] if b["properties"]["intervals_mode"]["enum"] == ["custom"]][0]
+    bed = custom["properties"]["custom_intervals"]
+    assert bed["pathType"] == "references" and bed["useS3Path"] is True and custom["required"] == ["custom_intervals"]

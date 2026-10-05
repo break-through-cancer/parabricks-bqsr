@@ -97,6 +97,18 @@ nextflow_pipeline {
         }
     }
 
+    test("more than 4 fq2bam GPUs fails at startup") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/modules/reference.fasta"; outdir = "${outputDir}/results"
+            fq2bam_gpus = 5
+        } }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains("Invalid fq2bam_gpus '5': must be between 1 and 4")
+        }
+    }
+
     test("missing --input fails naming the parameter") {
         when {
             params {

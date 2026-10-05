@@ -156,7 +156,8 @@
                     "type": "integer",
                     "description": "GPUs for fq2bam (CPUs and memory scale with it). Default 2: on a 21x WGS sample, 2 A10Gs cut fq2bam from 48.8 to 37.6 min for about 8% more cost; set 1 to minimise cost.",
                     "default": 2,
-                    "minimum": 1
+                    "minimum": 1,
+                    "maximum": 4
                 },
                 "fq2bam_low_memory": {
                     "type": "boolean",

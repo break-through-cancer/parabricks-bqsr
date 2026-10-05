@@ -5,7 +5,7 @@ import re
 import pandas as pd
 
 COLUMNS = ["patient", "sample", "status", "lane", "fastq_1", "fastq_2"]
-FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals")
+FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals", "intervals_mode")
 
 
 READ_TOKEN = re.compile(r"(?<=[._])(R?)([12])(?=[._])")
@@ -78,8 +78,14 @@ def apply_genome_params(params: dict) -> dict:
             p["known_sites"] = ",".join(sites)
         if p.get("custom_intervals"):
             p["intervals"] = p["custom_intervals"]
-    elif p.get("use_intervals") is False:
-        p["no_intervals"] = True
+    else:
+        mode = p.get("intervals_mode") or ("none" if p.get("use_intervals") is False else "gatk_calling_regions")
+        if mode == "none":
+            p["no_intervals"] = True
+        elif mode == "custom":
+            if not p.get("custom_intervals"):
+                raise ValueError("Intervals set to custom intervals but no intervals BED was selected")
+            p["intervals"] = p["custom_intervals"]
     for k in FORM_ONLY:
         p.pop(k, None)
     return p

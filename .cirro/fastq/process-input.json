@@ -5,6 +5,7 @@
   "genome_source": "$.dataset.params.genome_selection.genome_source",
   "genome": "$.dataset.params.genome_selection.genome",
   "use_intervals": "$.dataset.params.genome_selection.use_intervals",
+  "intervals_mode": "$.dataset.params.genome_selection.intervals_mode",
   "genome_index": "$.dataset.params.genome_selection.genome_index|/data",
   "dbsnp": "$.dataset.params.genome_selection.dbsnp",
   "known_indels": "$.dataset.params.genome_selection.known_indels",
