@@ -6,13 +6,18 @@ COLUMNS = ["patient", "sample", "status", "lane", "fastq_1", "fastq_2"]
 FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals", "intervals_mode")
 
 
-def singleton_files(samplesheet: pd.DataFrame) -> dict:
-    """sample -> singleton FASTQ file name, from the dataset samplesheet's optional fastq_singleton column."""
-    if "fastq_singleton" not in samplesheet.columns:
-        return {}
-    named = samplesheet.dropna(subset=["fastq_singleton"])
-    return {row["sample"]: str(row["fastq_singleton"]).rsplit("/", 1)[-1]
-            for _, row in named.iterrows() if str(row["fastq_singleton"]).strip()}
+def singleton_files(samplesheet: pd.DataFrame, files: pd.DataFrame) -> dict:
+    """sample -> singleton FASTQ file name. Cirro ingest moves the uploaded samplesheet's
+    fastq_singleton column into a singleton column of the file list (and does not list the file, as
+    it matches no paired_dnaseq name pattern); a fastq_singleton samplesheet column is also read."""
+    named = {}
+    for table, column in ((files, "singleton"), (samplesheet, "fastq_singleton")):
+        if column not in table.columns:
+            continue
+        for _, row in table.dropna(subset=[column]).iterrows():
+            if str(row[column]).strip():
+                named[row["sample"]] = str(row[column]).strip().rsplit("/", 1)[-1]
+    return named
 
 
 def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log) -> pd.DataFrame:
@@ -23,7 +28,7 @@ def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log)
     if "readType" in files.columns:
         files = files.loc[files["readType"].fillna("R") == "R"]
     original_files = list(files["file"])
-    singletons = singleton_files(samplesheet)
+    singletons = singleton_files(samplesheet, files)
     if singletons:
         files = files.loc[~files["file"].str.rsplit("/", n=1).str[-1].isin(set(singletons.values()))]
     if files.empty:

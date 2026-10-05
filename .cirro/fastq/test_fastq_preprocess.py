@@ -238,3 +238,13 @@ def test_singleton_for_a_sample_without_fastqs_is_an_error():
     meta = pd.DataFrame([{"sample": "S9", "fastq_singleton": "S9__singletons.fastq.gz"}])
     with pytest.raises(ValueError, match="S9"):
         build_fastq_samplesheet(f, meta, LOG)
+
+
+def test_singleton_named_in_cirros_file_list_column_is_resolved_next_to_its_mates():
+    d = "s3://project-p/datasets/src/data"
+    f = pd.DataFrame([
+        {"sample": "S1", "file": f"{d}/S1_R1.fastq.gz", "dataset": "src", "sampleIndex": 1, "read": 1, "readType": "R", "singleton": "S1_singletons.fastq.gz"},
+        {"sample": "S1", "file": f"{d}/S1_R2.fastq.gz", "dataset": "src", "sampleIndex": 1, "read": 2, "readType": "R", "singleton": "S1_singletons.fastq.gz"},
+    ])
+    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
+    assert sorted(zip(sheet["fastq_1"], sheet["fastq_2"])) == [(f"{d}/S1_R1.fastq.gz", f"{d}/S1_R2.fastq.gz"), (f"{d}/S1_singletons.fastq.gz", "")]
