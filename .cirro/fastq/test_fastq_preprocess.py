@@ -15,15 +15,20 @@ build_fastq_samplesheet = _preprocess.build_fastq_samplesheet
 LOG = logging.getLogger("test")
 
 
-def files(rows):
-    return pd.DataFrame(rows, columns=["sample", "lane", "read", "file"])
+def files(rows, with_index=True):
+    cols = ["sampleIndex", "sample", "lane", "read", "file"]
+    df = pd.DataFrame(rows, columns=cols)
+    return df if with_index else df.drop(columns=["sampleIndex"])
 
 
-def test_paired_and_single_end_with_metadata_defaults():
+META = pd.DataFrame([{"sample": "S1"}])
+
+
+def test_pairs_by_sample_index_with_metadata_defaults():
     f = files([
-        ("S1", "1", 1, "s3://b/S1_L1_R1.fastq.gz"), ("S1", "1", 2, "s3://b/S1_L1_R2.fastq.gz"),
-        ("S1", "2", 1, "s3://b/S1_L2_R1.fastq.gz"), ("S1", "2", 2, "s3://b/S1_L2_R2.fastq.gz"),
-        ("S2", "1", 1, "s3://b/S2_L1.fastq.gz"),
+        (0, "S1", "1", 1, "s3://b/a_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/a_R2.fq.gz"),
+        (1, "S1", "2", 1, "s3://b/b_R1.fq.gz"), (1, "S1", "2", 2, "s3://b/b_R2.fq.gz"),
+        (2, "S2", "1", 1, "s3://b/c.fq.gz"),
     ])
     meta = pd.DataFrame([{"sample": "S1", "patient": "P1", "status": 1}, {"sample": "S2"}])
     sheet = build_fastq_samplesheet(f, meta, LOG)
@@ -34,16 +39,52 @@ def test_paired_and_single_end_with_metadata_defaults():
     assert sheet[sheet["sample"] == "S1"]["status"].tolist() == [1, 1]
 
 
-def test_missing_lane_is_kept():
-    f = files([("S1", None, 1, "s3://b/S1_R1.fastq.gz"), ("S1", None, 2, "s3://b/S1_R2.fastq.gz")])
-    assert len(build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)) == 1
+def test_pairing_does_not_depend_on_file_names():
+    f = files([(0, "S1", "1", 1, "s3://b/x_1-merged.fastq.gz"), (0, "S1", "1", 2, "s3://b/x_2-merged.fastq.gz")])
+    assert build_fastq_samplesheet(f, META, LOG)[["fastq_1", "fastq_2"]].values.tolist() == [["s3://b/x_1-merged.fastq.gz", "s3://b/x_2-merged.fastq.gz"]]
 
 
-def test_index_files_are_ignored():
-    f = files([("S1", "1", 1, "s3://b/S1_R1.fastq.gz"), ("S1", "1", 2, "s3://b/S1_R2.fastq.gz")])
-    f["readType"] = ["R", "R"]
-    f.loc[len(f)] = ["S1", "1", 1, "s3://b/S1_I1.fastq.gz", "I"]
-    assert len(build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)) == 1
+def test_top_up_runs_in_the_same_lane_are_all_kept():
+    f = files([
+        (0, "S1", "1", 1, "s3://b/run1/S1_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/run1/S1_R2.fq.gz"),
+        (1, "S1", "1", 1, "s3://b/run2/S1_R1.fq.gz"), (1, "S1", "1", 2, "s3://b/run2/S1_R2.fq.gz"),
+    ])
+    sheet = build_fastq_samplesheet(f, META, LOG)
+    assert sorted(zip(sheet["fastq_1"], sheet["fastq_2"])) == [("s3://b/run1/S1_R1.fq.gz", "s3://b/run1/S1_R2.fq.gz"),
+                                                               ("s3://b/run2/S1_R1.fq.gz", "s3://b/run2/S1_R2.fq.gz")]
+
+
+def test_laneless_chunks_are_all_kept():
+    f = files([(0, "S1", None, 1, "s3://b/p1_R1.fq.gz"), (0, "S1", None, 2, "s3://b/p1_R2.fq.gz"),
+               (1, "S1", None, 1, "s3://b/p2_R1.fq.gz"), (1, "S1", None, 2, "s3://b/p2_R2.fq.gz")])
+    assert len(build_fastq_samplesheet(f, META, LOG)) == 2
+
+
+def test_read_1_without_read_2_in_a_paired_sample_is_an_error():
+    f = files([(0, "S1", "1", 1, "s3://b/a_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/a_R2.fq.gz"), (1, "S1", "1", 1, "s3://b/b_R1.fq.gz")])
+    with pytest.raises(ValueError, match="b_R1.fq.gz"):
+        build_fastq_samplesheet(f, META, LOG)
+
+
+def test_two_files_for_the_same_read_of_one_pair_is_an_error_not_a_silent_drop():
+    f = files([(0, "S1", "1", 1, "s3://b/a_R1.fq.gz"), (0, "S1", "1", 1, "s3://b/b_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/a_R2.fq.gz")])
+    with pytest.raises(ValueError, match="more than one read 1"):
+        build_fastq_samplesheet(f, META, LOG)
+
+
+def test_without_sample_index_one_pair_per_lane_still_works_and_extra_files_are_an_error():
+    ok = files([("x", "S1", "1", 1, "s3://b/a_R1.fq.gz"), ("x", "S1", "1", 2, "s3://b/a_R2.fq.gz")], with_index=False)
+    assert len(build_fastq_samplesheet(ok, META, LOG)) == 1
+    bad = files([("x", "S1", "1", 1, "s3://b/a_R1.fq.gz"), ("x", "S1", "1", 1, "s3://b/b_R1.fq.gz"),
+                 ("x", "S1", "1", 2, "s3://b/a_R2.fq.gz"), ("x", "S1", "1", 2, "s3://b/b_R2.fq.gz")], with_index=False)
+    with pytest.raises(ValueError, match="more than one read 1"):
+        build_fastq_samplesheet(bad, META, LOG)
+
+
+def test_index_reads_are_ignored():
+    f = files([(0, "S1", "1", 1, "s3://b/a_R1.fq.gz"), (0, "S1", "1", 2, "s3://b/a_R2.fq.gz"), (0, "S1", "1", 1, "s3://b/a_I1.fq.gz")])
+    f["readType"] = ["R", "R", "I"]
+    assert len(build_fastq_samplesheet(f, META, LOG)) == 1
 
 
 def test_no_files_is_an_error():
@@ -73,37 +114,6 @@ def test_custom_genome_resolves_dataset_files_and_known_sites():
 def test_custom_genome_without_index_is_an_error():
     with pytest.raises(ValueError, match="BWA genome index"):
         apply_genome_params({"genome_source": "dataset"})
-
-
-def test_top_up_runs_in_the_same_lane_are_all_kept():
-    f = files([
-        ("S1", "1", 1, "s3://b/run1/S1_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/run1/S1_L001_R2_001.fastq.gz"),
-        ("S1", "1", 1, "s3://b/run2/S1_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/run2/S1_L001_R2_001.fastq.gz"),
-    ])
-    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
-    assert sorted(sheet["fastq_1"]) == ["s3://b/run1/S1_L001_R1_001.fastq.gz", "s3://b/run2/S1_L001_R1_001.fastq.gz"]
-    assert sorted(sheet["fastq_2"]) == ["s3://b/run1/S1_L001_R2_001.fastq.gz", "s3://b/run2/S1_L001_R2_001.fastq.gz"]
-    assert sheet["lane"].tolist() == ["0", "1"]
-
-
-def test_laneless_chunks_are_all_kept_and_paired_by_name():
-    f = files([
-        ("S1", None, 1, "s3://b/S1_part1_R1.fastq.gz"), ("S1", None, 2, "s3://b/S1_part1_R2.fastq.gz"),
-        ("S1", None, 1, "s3://b/S1_part2_R1.fastq.gz"), ("S1", None, 2, "s3://b/S1_part2_R2.fastq.gz"),
-    ])
-    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
-    pairs = sorted(zip(sheet["fastq_1"], sheet["fastq_2"]))
-    assert pairs == [("s3://b/S1_part1_R1.fastq.gz", "s3://b/S1_part1_R2.fastq.gz"),
-                     ("s3://b/S1_part2_R1.fastq.gz", "s3://b/S1_part2_R2.fastq.gz")]
-
-
-def test_read_1_without_a_matching_read_2_in_a_paired_sample_is_an_error():
-    f = files([
-        ("S1", "1", 1, "s3://b/S1_A_R1.fastq.gz"), ("S1", "1", 2, "s3://b/S1_A_R2.fastq.gz"),
-        ("S1", "1", 1, "s3://b/S1_B_R1.fastq.gz"),
-    ])
-    with pytest.raises(ValueError, match="S1_B_R1.fastq.gz"):
-        build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
 
 
 def test_every_references_library_field_requests_an_s3_path():
@@ -192,15 +202,3 @@ def test_igenomes_branch_offers_three_interval_modes_and_a_custom_bed():
     custom = [b for b in igenomes["dependencies"]["intervals_mode"]["oneOf"] if b["properties"]["intervals_mode"]["enum"] == ["custom"]][0]
     bed = custom["properties"]["custom_intervals"]
     assert bed["pathType"] == "references" and bed["useS3Path"] is True and custom["required"] == ["custom_intervals"]
-
-
-def test_read_number_followed_by_a_hyphen_is_paired():
-    f = files([("S1", "1", 1, "s3://b/X99-0001_1-merged.fastq.gz"), ("S1", "1", 2, "s3://b/X99-0001_2-merged.fastq.gz")])
-    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
-    assert sheet[["fastq_1", "fastq_2"]].values.tolist() == [["s3://b/X99-0001_1-merged.fastq.gz", "s3://b/X99-0001_2-merged.fastq.gz"]]
-
-
-def test_digits_inside_a_name_are_not_mistaken_for_read_numbers():
-    f = files([("S1", "1", 1, "s3://b/X1-1_S2_L001_R1_001.fastq.gz"), ("S1", "1", 2, "s3://b/X1-1_S2_L001_R2_001.fastq.gz")])
-    sheet = build_fastq_samplesheet(f, pd.DataFrame([{"sample": "S1"}]), LOG)
-    assert len(sheet) == 1 and sheet.iloc[0]["fastq_2"].endswith("R2_001.fastq.gz")

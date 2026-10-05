@@ -1,32 +1,16 @@
 #!/usr/bin/env python3
 
-import re
-
 import pandas as pd
 
 COLUMNS = ["patient", "sample", "status", "lane", "fastq_1", "fastq_2"]
 FORM_ONLY = ("genome_source", "genome_index", "dbsnp", "known_indels", "custom_intervals", "use_intervals", "intervals_mode")
 
 
-READ_TOKEN = re.compile(r"(?<=[._-])(R?)([12])(?=[._-])")
-
-
-def pair_key(path: str) -> str:
-    """The path with its last read-number token (R1/R2, _1/_2, -1/-2) masked, so mates share a key."""
-    head, _, name = path.rpartition("/")
-    matches = list(READ_TOKEN.finditer(name))
-    if matches:
-        m = matches[-1]
-        name = f"{name[:m.start()]}{m.group(1)}#{name[m.end():]}"
-    return f"{head}/{name}"
-
-
 def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log) -> pd.DataFrame:
-    """One row per FASTQ (pair): read 1/2 become fastq_1/fastq_2; patient/status from sample metadata.
-
-    Every file is kept: mates are paired by path with the read number masked, so top-up runs and
-    lane-less chunks each become their own row. An unmatched read in a paired sample is an error.
-    """
+    """One row per FASTQ pair, as sarek_align's make_manifest: Cirro's ingest already pairs mates
+    (sampleIndex), so rows are keyed by sampleIndex/sample/lane/dataset and read 1/2 become
+    fastq_1/fastq_2. Nothing is dropped: a pair with two files for the same read, or a read 1 without
+    its read 2 in a paired sample, is an error."""
     if "readType" in files.columns:
         files = files.loc[files["readType"].fillna("R") == "R"]
     if files.empty:
@@ -34,20 +18,23 @@ def build_fastq_samplesheet(files: pd.DataFrame, samplesheet: pd.DataFrame, log)
     if files["read"].isna().any():
         raise ValueError("Read number missing for: " + ", ".join(files.loc[files["read"].isna(), "file"]))
 
+    f = files.assign(read=files["read"].astype(int), lane=files.get("lane", pd.Series(index=files.index, dtype=object)).fillna("1").astype(str))
+    key = [c for c in ("sampleIndex", "sample", "lane", "dataset") if c in f.columns]
+    paired = set(f.loc[f["read"] == 2, "sample"])
+
     rows, problems = [], []
-    for sample, group in files.groupby("sample", sort=True):
-        paired = (group["read"].astype(int) == 2).any()
-        by_key = {}
-        for rec in group.to_dict("records"):
-            lane = "1" if pd.isna(rec.get("lane")) else str(rec["lane"])
-            by_key.setdefault((lane, pair_key(rec["file"])), {})[int(rec["read"])] = rec["file"]
-        for (lane, _key), mates in sorted(by_key.items()):
-            if paired and set(mates) != {1, 2}:
-                problems.append(f"{sample}: no mate found for {', '.join(mates.values())}")
-                continue
-            rows.append(dict(sample=sample, lane=lane, fastq_1=mates[1], fastq_2=mates.get(2, "")))
+    for _, group in f.groupby(key, sort=True, dropna=False):
+        sample, lane = group["sample"].iloc[0], group["lane"].iloc[0]
+        dup = group["read"].value_counts()
+        for read in dup[dup > 1].index:
+            problems.append(f"{sample}: more than one read {read} for one pair: {', '.join(group.loc[group['read'] == read, 'file'])}")
+        mates = dict(zip(group["read"], group["file"]))
+        if sample in paired and set(mates) != {1, 2}:
+            problems.append(f"{sample}: no mate found for {', '.join(mates.values())}")
+            continue
+        rows.append(dict(sample=sample, lane=lane, fastq_1=mates.get(1, ""), fastq_2=mates.get(2, "")))
     if problems:
-        raise ValueError("Cannot pair FASTQ files:\n  " + "\n  ".join(problems))
+        raise ValueError("Cannot build FASTQ pairs:\n  " + "\n  ".join(problems))
 
     wide = pd.DataFrame(rows)
     meta = samplesheet.reindex(columns=["sample", "patient", "status"]).set_index("sample")
