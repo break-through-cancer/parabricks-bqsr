@@ -42,6 +42,38 @@ nextflow_pipeline {
             assert log.contains('No intervals supplied')
         }
     }
+    test("default (trimming off, poly-G auto): fq2bam consumes fastp's poly-G-trimmed reads") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            save_trimmed = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert file("${outputDir}/results/preprocessing/fastp/S1/S1_1_1.trimmed.fastq.gz").exists()
+        }
+    }
+
+    test("poly-G off and trimming off: fq2bam reads the original FASTQs and nothing is written") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            poly_g_trimming = 'off'
+            save_trimmed = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            def published = file("${outputDir}/results/preprocessing/fastp")
+            assert !published.exists() || published.listFiles().every { dir -> !dir.listFiles().any { it.name.endsWith('.fastq.gz') } }
+        }
+    }
+
     test("trimming on: fq2bam consumes fastp's trimmed reads") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'

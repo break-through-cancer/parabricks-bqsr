@@ -3,11 +3,24 @@ nextflow_function {
     script "modules/local/fastp.nf"
     function "fastpArgs"
 
-    test("report-only paired: no output FASTQs, every filter and trimmer off") {
+    test("default (poly-G auto, no trimming): writes FASTQs; no quality filter, adapter trimming or poly-G flag; length filter on") {
         when { function { """
             input[0] = [id: 'S1_1', single_end: false]
             input[1] = ['r1.fastq.gz', 'r2.fastq.gz']
-            input[2] = [trim: false, threads: 4]
+            input[2] = [trim: false, poly_g: 'auto', length_required: 15, threads: 8]
+        """ } }
+        then {
+            def a = function.result
+            assert a.contains('-o S1_1_1.trimmed.fastq.gz -O S1_1_2.trimmed.fastq.gz')
+            ['--disable_quality_filtering', '--disable_adapter_trimming', '--length_required 15', '-z 1'].each { assert a.contains(it) }
+            ['--trim_poly_g', '--disable_trim_poly_g', '--detect_adapter_for_pe', '--disable_length_filtering'].each { assert !a.contains(it) }
+        }
+    }
+    test("poly-G off and no trimming: report only, no output FASTQs, every filter and trimmer off") {
+        when { function { """
+            input[0] = [id: 'S1_1', single_end: false]
+            input[1] = ['r1.fastq.gz', 'r2.fastq.gz']
+            input[2] = [trim: false, poly_g: 'off', threads: 4]
         """ } }
         then {
             def a = function.result
@@ -17,12 +30,12 @@ nextflow_function {
             assert a.contains('-j S1_1.fastp.json -h S1_1.fastp.html')
         }
     }
-    test("trimming single-end: one output, quality filter still off, poly-G off unless trim_nextseq") {
+    test("trimming single-end with poly-G off: one output, quality filter still off") {
         when { function { """
             input[0] = [id: 'S2_1', single_end: true]
             input[1] = 's.fastq.gz'
             input[2] = [trim: true, clip_r1: 3, clip_r2: 5, three_prime_clip_r1: 2, three_prime_clip_r2: 0,
-                        trim_nextseq: false, length_required: 15, threads: 2]
+                        poly_g: 'off', length_required: 15, threads: 2]
         """ } }
         then {
             def a = function.result
@@ -32,12 +45,12 @@ nextflow_function {
             assert a.contains('--trim_front1 3') && a.contains('--trim_tail1 2') && a.contains('--length_required 15')
         }
     }
-    test("trimming paired with poly-G") {
+    test("trimming paired with poly-G forced on") {
         when { function { """
             input[0] = [id: 'S1_1', single_end: false]
             input[1] = ['r1.fastq.gz', 'r2.fastq.gz']
             input[2] = [trim: true, clip_r1: 0, clip_r2: 0, three_prime_clip_r1: 0, three_prime_clip_r2: 0,
-                        trim_nextseq: true, length_required: 20, threads: 4]
+                        poly_g: 'on', length_required: 20, threads: 4]
         """ } }
         then {
             def a = function.result

@@ -265,3 +265,15 @@ def test_form_offers_an_optional_fq2bam_memory_override_and_maps_it():
     assert "default" not in field and "fq2bam_memory_gb" not in advanced.get("required", [])
     mapping = json.loads((here / "process-input.json").read_text())
     assert mapping["fq2bam_memory_gb"] == "$.dataset.params.advanced.fq2bam_memory_gb"
+
+
+def test_form_offers_poly_g_trimming_auto_by_default_and_maps_it():
+    import json
+    here = pathlib.Path(__file__).parent
+    trimming = json.loads((here / "process-form.json").read_text())["form"]["properties"]["read_trimming"]["properties"]
+    assert trimming["poly_g_trimming"]["default"] == "auto"
+    assert trimming["poly_g_trimming"]["enum"] == ["auto", "on", "off"]
+    assert "trim_nextseq" not in trimming
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["poly_g_trimming"] == "$.dataset.params.read_trimming.poly_g_trimming"
+    assert "trim_nextseq" not in mapping

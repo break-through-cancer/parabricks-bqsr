@@ -113,10 +113,11 @@
                     "default": 0,
                     "minimum": 0
                 },
-                "trim_nextseq": {
-                    "type": "boolean",
-                    "description": "Trim poly-G tails (two-colour instruments).",
-                    "default": false
+                "poly_g_trimming": {
+                    "type": "string",
+                    "enum": ["auto", "on", "off"],
+                    "default": "auto",
+                    "description": "Poly-G tail trimming by fastp, independent of --trim_fastq. auto: fastp detects two-colour instruments (NovaSeq, NextSeq) and trims there. Untrimmed poly-G tails changed about 10% of read alignments on NovaSeq data. off: fq2bam reads the original FASTQs."
                 },
                 "length_required": {
                     "type": "integer",

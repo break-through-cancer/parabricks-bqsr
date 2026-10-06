@@ -3,7 +3,23 @@ nextflow_process {
     script "modules/local/fastp.nf"
     process "FASTP"
 
-    test("report-only paired lane emits counts covering both mates and writes no FASTQ") {
+    test("report-only paired lane (poly-G off) emits counts covering both mates and writes no FASTQ") {
+        when {
+            params { poly_g_trimming = 'off' }
+            process { """
+            input[0] = [[id: 'S1_1', sample: 'S1', single_end: false],
+                        [file("\${projectDir}/tests/fixtures/fastq/S1_L1_R1.fastq.gz"), file("\${projectDir}/tests/fixtures/fastq/S1_L1_R2.fastq.gz")]]
+            input[1] = false
+        """ }
+        }
+        then {
+            assert process.success
+            def json = new groovy.json.JsonSlurper().parse(file(process.out.json[0][1]))
+            assert json.summary.before_filtering.total_reads == 80
+            assert process.out.reads.size() == 0
+        }
+    }
+    test("default (poly-G auto, no trimming) writes both mates for alignment") {
         when { process { """
             input[0] = [[id: 'S1_1', sample: 'S1', single_end: false],
                         [file("\${projectDir}/tests/fixtures/fastq/S1_L1_R1.fastq.gz"), file("\${projectDir}/tests/fixtures/fastq/S1_L1_R2.fastq.gz")]]
@@ -11,9 +27,8 @@ nextflow_process {
         """ } }
         then {
             assert process.success
-            def json = new groovy.json.JsonSlurper().parse(file(process.out.json[0][1]))
-            assert json.summary.before_filtering.total_reads == 80
-            assert process.out.reads.size() == 0
+            assert process.out.reads[0][1].collect { file(it).name } == ['S1_1_1.trimmed.fastq.gz', 'S1_1_2.trimmed.fastq.gz']
+            assert new groovy.json.JsonSlurper().parse(file(process.out.json[0][1])).summary.after_filtering.total_reads == 80
         }
     }
     test("trimming single-end lane writes a trimmed FASTQ") {

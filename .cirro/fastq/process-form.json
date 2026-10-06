@@ -224,10 +224,16 @@
             "default": 0,
             "minimum": 0
           },
-          "trim_nextseq": {
-            "title": "Trim poly-G tails",
-            "type": "boolean",
-            "default": false
+          "poly_g_trimming": {
+            "title": "Poly-G tail trimming",
+            "type": "string",
+            "enum": [
+              "auto",
+              "on",
+              "off"
+            ],
+            "default": "auto",
+            "description": "Applies whether or not trimming is enabled. auto: trimmed on two-colour instruments (NovaSeq, NextSeq), as fastp and nf-core/sarek do. off: align the original reads."
           },
           "length_required": {
             "title": "Minimum read length",

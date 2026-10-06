@@ -21,7 +21,7 @@
   "clip_r2": "$.dataset.params.read_trimming.clip_r2",
   "three_prime_clip_r1": "$.dataset.params.read_trimming.three_prime_clip_r1",
   "three_prime_clip_r2": "$.dataset.params.read_trimming.three_prime_clip_r2",
-  "trim_nextseq": "$.dataset.params.read_trimming.trim_nextseq",
+  "poly_g_trimming": "$.dataset.params.read_trimming.poly_g_trimming",
   "length_required": "$.dataset.params.read_trimming.length_required",
   "save_trimmed": "$.dataset.params.read_trimming.save_trimmed",
   "markdups_se_mode": "$.dataset.params.advanced.markdups_se_mode",

@@ -5,7 +5,7 @@ include { SAMPLESHEET_TO_FASTQS; samplesheetEntry   } from './subworkflows/local
 include { resolveReferences; checkReferences; intervalsMessage } from './subworkflows/local/references/main'
 include { PREPARE_KNOWN_SITES                       } from './subworkflows/local/prepare_known_sites/main'
 include { READ_CHECKS; fastpReadCount               } from './subworkflows/local/read_checks/main'
-include { FASTP                                     } from './modules/local/fastp'
+include { FASTP; fastpWritesReads                   } from './modules/local/fastp'
 include { PARABRICKS_FQ2BAM                         } from './modules/local/parabricks_fq2bam'
 include { PARABRICKS_FQ2BAM_PART                    } from './modules/local/parabricks_fq2bam_part'
 include { PARABRICKS_MARKDUP                        } from './modules/local/parabricks_markdup'
@@ -36,14 +36,15 @@ workflow {
 
         SAMPLESHEET_TO_FASTQS(params.input)
         def trim = params.trim_fastq.toString() == 'true'
+        def fastp_reads = fastpWritesReads(trim, params.poly_g_trimming)
         FASTP(SAMPLESHEET_TO_FASTQS.out.lanes, trim)
 
         fastq_counts = FASTP.out.json
-            .map { meta, json -> [groupKey(meta.sample, meta.n_lanes), fastpReadCount(json, trim)] }
+            .map { meta, json -> [groupKey(meta.sample, meta.n_lanes), fastpReadCount(json, fastp_reads)] }
             .groupTuple()
             .map { sample, counts -> [sample.toString(), counts.sum()] }
 
-        sample_reads = (trim ? FASTP.out.reads : SAMPLESHEET_TO_FASTQS.out.lanes)
+        sample_reads = (fastp_reads ? FASTP.out.reads : SAMPLESHEET_TO_FASTQS.out.lanes)
             .map { meta, reads -> [groupKey(meta.sample, meta.n_lanes), meta, reads instanceof List ? reads : [reads]] }
             .groupTuple()
             .map { sample, metas, reads ->
@@ -135,6 +136,7 @@ def validateParams() {
     if (!(params.output_fmt in ['bam', 'cram'])) error "Invalid output_fmt '${params.output_fmt}': must be 'bam' or 'cram'"
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
     if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
+    if (!(params.poly_g_trimming in ['auto', 'on', 'off'])) error "Invalid poly_g_trimming '${params.poly_g_trimming}': must be 'auto', 'on' or 'off'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"
     if (params.fq2bam_memory_gb != null && params.fq2bam_memory_gb.toString() != '') {
         def m = params.fq2bam_memory_gb.toString()

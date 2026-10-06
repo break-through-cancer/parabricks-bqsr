@@ -133,6 +133,18 @@ nextflow_pipeline {
         }
     }
 
+    test("an unknown poly-G mode fails at startup") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/modules/reference.fasta"; outdir = "${outputDir}/results"
+            poly_g_trimming = 'yes'
+        } }
+        then {
+            assert !workflow.success
+            assert workflow.stdout.join('\n').contains("Invalid poly_g_trimming 'yes': must be 'auto', 'on' or 'off'")
+        }
+    }
+
     test("missing --input fails naming the parameter") {
         when {
             params {

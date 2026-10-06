@@ -154,11 +154,11 @@ about 40–65 s.
 | `--ref_fasta`, `--ref_fasta_fai`, `--bwa_index`, `--known_sites`, `--intervals` | from `--genome` | Explicit reference overrides. |
 | `--no_intervals` | `false` | Build the BQSR table genome-wide. |
 | `--seq_platform` | `ILLUMINA` | Read group `PL`. |
-| `--trim_fastq` | `false` | Enable fastp trimming (fastp always runs for counts and QC). |
+| `--trim_fastq` | `false` | Enable fastp adapter trimming and clipping (fastp always runs for counts and QC). |
 | `--clip_r1`, `--clip_r2` | `0` | Bases removed from the 5′ end of read 1 / read 2. |
 | `--three_prime_clip_r1`, `--three_prime_clip_r2` | `0` | Bases removed from the 3′ end. |
-| `--trim_nextseq` | `false` | Trim poly-G tails (two-colour instruments). |
-| `--length_required` | `15` | Minimum read length after trimming. |
+| `--poly_g_trimming` | `auto` | Poly-G tail trimming by fastp, applied whether or not `--trim_fastq` is set: `auto` (fastp detects two-colour instruments such as NovaSeq and NextSeq), `on` or `off`. When not `off`, fq2bam aligns fastp's output instead of the original FASTQs. |
+| `--length_required` | `15` | Minimum read length after trimming (including poly-G trimming). |
 | `--save_trimmed` | `false` | Publish trimmed FASTQs. |
 | `--markdups_se_mode` | `5prime` | Single-end duplicate marking: `5prime` (standard) or `start-end` (adapter-trimmed short fragments such as cfDNA). |
 | `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
@@ -179,8 +179,22 @@ Parameters are declared in `nextflow_schema.json` (nf-schema); the startup log p
 parameters that differ from their defaults, as nf-core pipelines do. A new parameter must be
 added to both `nextflow.config` and the schema; `tests/config` checks they match.
 
-Quality filtering in fastp is always disabled (BQSR handles base qualities); with
-trimming on, `--length_required` is the only filter that removes reads.
+Quality filtering in fastp is always disabled: GATK discourages quality trimming, as base
+qualities are handled by soft-clipping, BQSR and the variant callers. Poly-G tails are
+different. On two-colour instruments "no signal" is called as a G, often with good quality,
+so reads that run past a short fragment end in G runs that alignment does not clip. On a
+NovaSeq WGS sample (1M read pairs), untrimmed poly-G tails changed about 10% of read
+alignments against the same reads after trimming. They accounted for 99.7% of the extra
+supplementary alignments and 98.8% of the proper-pair changes, and raised duplicates from
+7.6% to 9.4%. With poly-G trimming, Parabricks matched nf-core/sarek's BWA-MEM: identical
+proper-pair, duplicate and MAPQ-0 rates; the only position differences were MAPQ-0 reads.
+`--length_required` is the only filter that removes reads (pairs emptied by trimming), and
+the read checks count fastp's output whenever fq2bam aligns it.
+
+When fq2bam aligns fastp's output, it waits for fastp to finish (a CPU task; no GPU is
+held meanwhile). fastp runs with 16 threads, the most fastp 0.24 uses, and fast output
+compression (`-z 1`). For reference, nf-core/sarek's fastp (12 threads) took 45 min on a
+105x WGS sample.
 
 ### Outputs
 
