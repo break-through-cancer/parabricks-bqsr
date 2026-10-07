@@ -1,0 +1,31 @@
+nextflow_process {
+    name "Test SAMTOOLS_FLAGSTAT"
+    script "modules/local/samtools_flagstat.nf"
+    process "SAMTOOLS_FLAGSTAT"
+
+    test("reports primary/secondary/supplementary counts for a BAM") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.bam")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then {
+            assert process.success
+            def t = file(process.out.flagstat[0][1]).text
+            assert t.contains('10\t0\tprimary') && t.contains('1\t0\tsecondary') && t.contains('0\t0\tsupplementary')
+        }
+    }
+
+    test("reads a CRAM via --input-fmt-option reference, without a separate index input") {
+        when { process { """
+            def m = "\${projectDir}/tests/fixtures/modules"
+            input[0] = [[sample: 'S'], file("\$m/sample.cram")]
+            input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+        """ } }
+        then {
+            assert process.success
+            def t = file(process.out.flagstat[0][1]).text
+            assert t.contains('10\t0\tprimary')
+        }
+    }
+}

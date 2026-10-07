@@ -1,11 +1,11 @@
 workflow READ_CHECKS {
     take:
-    final_stats     // [ meta, stats ]
+    final_flagstat  // [ meta, flagstat ] -- samtools flagstat -O tsv on the true final published file
     before_idxstats // [ meta, idxstats ]
     fastq_counts    // [ sample, long ] -- empty for the alignment entry
 
     main:
-    finals = final_stats.map { meta, stats -> [meta.sample, samtoolsStatsCounts(stats)] }
+    finals = final_flagstat.map { meta, flagstat -> [meta.sample, samtoolsFlagstatCounts(flagstat)] }
     befores = before_idxstats.map { meta, idx -> [meta.sample, idxstatsTotal(idx)] }
     fastqs = fastq_counts.toList().map { rows -> rows.collectEntries { [(it[0]): it[1]] } }
 
@@ -35,16 +35,17 @@ def fastpReadCount(Object json, boolean trimmed) {
     (trimmed ? s.after_filtering.total_reads : s.before_filtering.total_reads) as long
 }
 
-def samtoolsStatsCounts(Object stats) {
+def samtoolsFlagstatCounts(Object flagstat) {
+    // Parses `samtools flagstat -O tsv`: "<QC-passed>\t<QC-failed>\t<label>" per line.
     def v = [:]
-    toPath(stats).eachLine { line ->
+    toPath(flagstat).eachLine { line ->
         def t = line.tokenize('\t')
-        if (t.size() >= 3 && t[0] == 'SN' && t[1] in ['raw total sequences:', 'non-primary alignments:', 'supplementary alignments:']) {
-            v[t[1]] = t[2] as long
+        if (t.size() >= 3 && t[2] in ['primary', 'secondary', 'supplementary']) {
+            v[t[2]] = t[0] as long
         }
     }
-    def raw = v['raw total sequences:'] ?: 0L
-    [primary: raw, records: raw + (v['non-primary alignments:'] ?: 0L) + (v['supplementary alignments:'] ?: 0L)]
+    def primary = v['primary'] ?: 0L
+    [primary: primary, records: primary + (v['secondary'] ?: 0L) + (v['supplementary'] ?: 0L)]
 }
 
 def idxstatsTotal(Object idxstats) {

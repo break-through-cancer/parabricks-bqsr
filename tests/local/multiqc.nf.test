@@ -8,7 +8,7 @@ nextflow_process {
                 script "modules/local/samtools_stats.nf"
                 process { """
                     def m = "\${projectDir}/tests/fixtures/modules"
-                    input[0] = [[sample: 'S'], file("\$m/sample.bam"), file("\$m/sample.bam.bai")]
+                    input[0] = [[sample: 'S'], file("\$m/sample.bam")]
                     input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
                 """ }
             }

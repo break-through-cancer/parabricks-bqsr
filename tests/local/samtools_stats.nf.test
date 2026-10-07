@@ -5,7 +5,7 @@ nextflow_process {
     test("reports raw total and non-primary counts for a CRAM") {
         when { process { """
             def m = "\${projectDir}/tests/fixtures/modules"
-            input[0] = [[sample: 'S'], file("\$m/sample.cram"), file("\$m/sample.cram.crai")]
+            input[0] = [[sample: 'S'], file("\$m/sample.cram")]
             input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
         """ } }
         then {

@@ -5,7 +5,7 @@ process SAMTOOLS_STATS {
     memory '4 GB'
 
     input:
-    tuple val(meta), path(alignment), path(index)
+    tuple val(meta), path(alignment)
     tuple path(ref_fasta), path(ref_fasta_fai)
 
     output:

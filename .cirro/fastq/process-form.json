@@ -161,6 +161,12 @@
         ],
         "default": "3.0"
       },
+      "publish_raw_alignment": {
+        "title": "Publish raw (pre-BQSR) alignment",
+        "type": "boolean",
+        "default": false,
+        "description": "Also publish the duplicate-marked alignment from before BQSR, as an indexed CRAM at the CRAM Version above (for long-term storage). Only has an effect when known sites are supplied; a later alignment-entry run can then apply BQSR -- with any quantization choice -- without repeating alignment. Off by default: this extra file runs roughly 2-3x the size of the final quantized output."
+      },
       "quantization": {
         "title": "Quality-Score Quantization",
         "type": "object",

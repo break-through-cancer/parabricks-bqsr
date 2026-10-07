@@ -208,6 +208,11 @@
                         "3.1"
                     ]
                 },
+                "publish_raw_alignment": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also publish the pre-BQSR alignment (FASTQ entry, with known sites only) as an indexed CRAM at --cram_version, alongside the already-published BQSR table. Lets a later alignment-entry run apply BQSR -- with a different quantization choice, or none -- without repeating alignment. No effect without known sites, since the published .md file already is the pre-recalibration alignment. Off by default: the extra CRAM runs roughly 2-3x the size of the final quantized output, recurring in storage for as long as it's kept."
+                },
                 "quantize_quals_enabled": {
                     "type": "boolean",
                     "description": "Quantize quality scores; false publishes unquantized output.",

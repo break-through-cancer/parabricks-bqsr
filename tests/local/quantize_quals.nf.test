@@ -111,6 +111,29 @@ nextflow_process {
         }
     }
 
+    test("a before/after quality-distribution histogram is emitted for MultiQC") {
+        when { process { """
+            input[0] = [[sample: 'TEST_SAMPLE', suffix: 'recal'], file("\${projectDir}/tests/fixtures/modules/sample.bam")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+            input[2] = 'bam'
+        """ } }
+        then {
+            assert process.success
+            def lines = file(process.out.hist[0]).readLines()
+            assert lines[0] == "# id: 'quantize_quals_hist'"
+            assert lines[2] == "# plot_type: 'linegraph'"
+            assert lines.contains('Category\tbefore\tafter')
+            // Every input quality bin is preserved as its own row; quantized bins gain the collapsed mass.
+            assert lines.contains('Q0\t0.5\t0.5')
+            assert lines.contains('Q6\t2.5\t3.8')
+            assert lines.contains('Q10\t1.9\t12.1')
+            assert lines.contains('Q20\t2.7\t22.7')
+            assert lines.contains('Q30\t1.6\t52.1')
+            // A bin that only exists pre-quantization gets 0 on the "after" side, not dropped.
+            assert lines.contains('Q93\t0.3\t0')
+        }
+    }
+
     test("cram_version 3.1 writes CRAM 3.1") {
         when {
             params { cram_version = '3.1' }

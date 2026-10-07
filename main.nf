@@ -12,7 +12,9 @@ include { PARABRICKS_MARKDUP                        } from './modules/local/para
 include { PARABRICKS_APPLYBQSR                      } from './modules/local/parabricks_applybqsr'
 include { QUANTIZE_QUALS                            } from './modules/local/quantize_quals'
 include { SAMTOOLS_FINALIZE                         } from './modules/local/samtools_finalize'
+include { SAMTOOLS_FINALIZE as SAMTOOLS_FINALIZE_RAW } from './modules/local/samtools_finalize'
 include { SAMTOOLS_STATS                            } from './modules/local/samtools_stats'
+include { SAMTOOLS_FLAGSTAT                         } from './modules/local/samtools_flagstat'
 include { MOSDEPTH                                  } from './modules/local/mosdepth'
 include { MULTIQC                                   } from './modules/local/multiqc'
 include { paramsSummaryLog                          } from 'plugin/nf-schema'
@@ -75,6 +77,18 @@ workflow {
         aligned_cram = PARABRICKS_FQ2BAM.out.cram.mix(PARABRICKS_MARKDUP.out.cram)
         aligned_table = PARABRICKS_FQ2BAM.out.table.mix(PARABRICKS_MARKDUP.out.table)
 
+        // With known sites, the pre-recalibration alignment is otherwise never published (only
+        // the table is, unconditionally, by PARABRICKS_FQ2BAM/MARKDUP's own publishDir) -- an
+        // alignment-entry run can later apply BQSR against it, with any quantization choice,
+        // without repeating alignment. No effect without known sites: the published .md file
+        // already is this alignment.
+        if (bqsr && params.publish_raw_alignment.toString() == 'true') {
+            SAMTOOLS_FINALIZE_RAW(
+                aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] },
+                ref_ch, 'cram'
+            )
+        }
+
         if (bqsr) {
             PARABRICKS_APPLYBQSR(
                 aligned_cram.join(aligned_table, failOnMismatch: true)
@@ -101,14 +115,21 @@ workflow {
     if (quantize) {
         QUANTIZE_QUALS(to_finish, ref_ch, params.output_fmt)
         final_ch = QUANTIZE_QUALS.out.alignment
-        quant_mqc = QUANTIZE_QUALS.out.mqc
+        quant_mqc = QUANTIZE_QUALS.out.mqc.mix(QUANTIZE_QUALS.out.hist)
     } else {
         SAMTOOLS_FINALIZE(to_finish, ref_ch, params.output_fmt)
         final_ch = SAMTOOLS_FINALIZE.out.alignment
         quant_mqc = Channel.empty()
     }
 
-    SAMTOOLS_STATS(final_ch, ref_ch)
+    // Detailed stats read the pre-quantization alignment (always BAM here): everything it
+    // reports except quality-value histograms is unaffected by BQSR/quantization, and this
+    // avoids CRAM decode for samtools stats' mostly-single-threaded accumulation. flagstat
+    // instead reads the true published file, genome-wide/fastq-read-count integrity (read
+    // checks) and the mosdepth/CRAM-validity canary below both need to see what's actually
+    // delivered, not an earlier intermediate.
+    SAMTOOLS_STATS(to_finish, ref_ch)
+    SAMTOOLS_FLAGSTAT(final_ch.map { meta, aln, _idx -> [meta, aln] }, ref_ch)
     if (params.output_fmt == 'cram' && params.cram_version == '3.1') {
         log.warn "mosdepth cannot read CRAM 3.1: coverage QC is skipped (use --cram_version 3.0 to keep it)"
         mosdepth_reports = Channel.empty()
@@ -117,13 +138,14 @@ workflow {
         mosdepth_reports = MOSDEPTH.out.reports.flatMap { it[1] }
     }
     READ_CHECKS(
-        SAMTOOLS_STATS.out.stats.map { meta, s -> [[sample: meta.sample], s] },
+        SAMTOOLS_FLAGSTAT.out.flagstat.map { meta, s -> [[sample: meta.sample], s] },
         before_idxstats.map { meta, idx -> [[sample: meta.sample], idx] },
         fastq_counts
     )
     MULTIQC(
         extra_qc
             .mix(SAMTOOLS_STATS.out.stats.map { it[1] })
+            .mix(SAMTOOLS_FLAGSTAT.out.flagstat.map { _meta, flagstat -> flagstat })
             .mix(mosdepth_reports)
             .mix(quant_mqc)
             .mix(READ_CHECKS.out.mqc)
@@ -135,6 +157,7 @@ def validateParams() {
     if (!params.input) error "Missing required parameter: input (path to samplesheet CSV). See README.md and assets/samplesheet.csv."
     if (!(params.output_fmt in ['bam', 'cram'])) error "Invalid output_fmt '${params.output_fmt}': must be 'bam' or 'cram'"
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
+    if (!(params.publish_raw_alignment.toString() in ['true', 'false'])) error "Invalid publish_raw_alignment '${params.publish_raw_alignment}': must be true or false"
     if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
     if (!(params.poly_g_trimming in ['auto', 'on', 'off'])) error "Invalid poly_g_trimming '${params.poly_g_trimming}': must be 'auto', 'on' or 'off'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"

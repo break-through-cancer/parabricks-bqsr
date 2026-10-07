@@ -22,9 +22,12 @@ nextflow_pipeline {
             assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 2
             assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 0
             assert succeeded.count { it.startsWith('MOSDEPTH') } == 2
+            assert succeeded.count { it.startsWith('SAMTOOLS_STATS') } == 2
+            assert succeeded.count { it.startsWith('SAMTOOLS_FLAGSTAT') } == 2
             ['SAMPLE_A', 'SAMPLE_B'].each { s ->
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram.crai").exists()
+                assert file("${outputDir}/results/reports/samtools/${s}/${s}.flagstat").exists()
             }
             assert (file("${outputDir}/results").list() as List).sort() == ['multiqc', 'pipeline_info', 'preprocessing', 'reports']
             assert file("${outputDir}/results/multiqc/multiqc_report.html").exists()

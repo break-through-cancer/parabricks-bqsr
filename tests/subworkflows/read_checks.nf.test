@@ -2,17 +2,17 @@ nextflow_function {
     name "Read-check functions"
     script "subworkflows/local/read_checks/main.nf"
 
-    test("samtools stats counts") {
-        function "samtoolsStatsCounts"
+    test("samtools flagstat counts") {
+        function "samtoolsFlagstatCounts"
         when { function { """
-            def f = file("\${launchDir}/s.stats"); f.text = 'SN\\traw total sequences:\\t10\\t# x\\nSN\\tnon-primary alignments:\\t1\\nSN\\tsupplementary alignments:\\t2\\n'
+            def f = file("\${launchDir}/s.flagstat"); f.text = '10\\t0\\tprimary\\n1\\t0\\tsecondary\\n2\\t0\\tsupplementary\\n'
             input[0] = f
         """ } }
         then { assert function.result == [primary: 10L, records: 13L] }
     }
-    test("samtools stats counts from real samtools output, which includes decimal SN values") {
-        function "samtoolsStatsCounts"
-        when { function { "input[0] = file(\"\${projectDir}/tests/fixtures/modules/sample.stats\")" } }
+    test("samtools flagstat counts from real samtools flagstat -O tsv output") {
+        function "samtoolsFlagstatCounts"
+        when { function { "input[0] = file(\"\${projectDir}/tests/fixtures/modules/sample.flagstat\")" } }
         then { assert function.result == [primary: 10L, records: 11L] }
     }
     test("idxstats total includes the unplaced line") {

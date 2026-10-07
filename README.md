@@ -169,6 +169,7 @@ duplicate metrics are requested took about 40–65 s.
 | `--fq2bam_memory_gb` | unset | Override `fq2bam`'s first-attempt host memory in GB (16–768); retries multiply it by the attempt number and `--memory-limit` stays at half. Unset: 44 GB per GPU, at least 64. See *Settings by sequencing depth*. |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
+| `--publish_raw_alignment` | `false` | FASTQ entry with known sites only: also publish the pre-BQSR, duplicate-marked alignment as an indexed CRAM at `--cram_version` (`preprocessing/markduplicates/<s>/<s>.md.cram`), alongside the BQSR table that's already published there. Lets a later alignment-entry run apply BQSR — with a different quantization choice, or none — without repeating alignment. No effect without known sites (the published `.md` file already is this alignment). Off by default: measured on real data, this extra CRAM runs about 2.4x the size of the final quantized CRAM (quantization alone, independent of CRAM's own compression, cut file size by more than half here) — on a 105x sample (77.6 GB final CRAM) that's roughly 185 GB extra, recurring for as long as it's kept. Weigh that against the cost of the alignment it saves re-running (105x `fq2bam`: $4.97, 89 min). |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
@@ -200,24 +201,38 @@ compression (`-z 1`). For reference, nf-core/sarek's fastp (12 threads) took 45 
 
 ```
 preprocessing/recalibrated/<s>/<s>.recal.<cram|bam> (+ index)   BQSR ran
-preprocessing/markduplicates/<s>/<s>.md.<cram|bam> (+ index)    no known sites
+preprocessing/markduplicates/<s>/<s>.md.<cram|bam> (+ index)    no known sites, or --publish_raw_alignment
 preprocessing/recal_table/<s>/<s>.table                          FASTQ entry with known sites
 preprocessing/fastp/<s>/                                         --save_trimmed only
 reports/fastp/<s>/, reports/markduplicates/<s>/, reports/parabricks_qc/<s>/,
-reports/samtools/<s>/, reports/mosdepth/<s>/, reports/quantize/<s>/
+reports/samtools/<s>/ (<s>.stats, <s>.flagstat), reports/mosdepth/<s>/, reports/quantize/<s>/
 multiqc/multiqc_report.html
 pipeline_info/
 ```
 
 The layout matches nf-core/sarek, so sarek-based variant calling (including Cirro's
-`sarek_call_variants`) recognises the outputs. The pre-BQSR `fq2bam` CRAM and the
-intermediate `applybqsr` BAM are not published.
+`sarek_call_variants`) recognises the outputs. The intermediate `applybqsr` BAM is never
+published. The pre-BQSR `fq2bam`/`markdup` alignment is published only via
+`--publish_raw_alignment` (see *Parameters*); otherwise it's discarded once BQSR has run.
+
+`reports/samtools/<s>/<s>.stats` (full `samtools stats`, error rate/insert size/GC bias/etc.)
+reads the pre-quantization alignment, not the published file: BQSR and quantization only
+rewrite quality bytes, never alignment or mismatches, so every field it reports is identical
+either way except quality-value histograms, which `reports/quantize/<s>/` covers instead (see
+below). Reading the pre-quantization BAM avoids CRAM-decode overhead on `stats`' mostly
+single-threaded accumulation loop. `<s>.flagstat` (`samtools flagstat`) always reads the true
+published file, cheaply, and is what the read-count check below relies on.
+
+The MultiQC report also plots the quality-score distribution before and after quantization
+(`reports/quantize/<s>/` log; the two percentage-by-bin lines `quantize_quals` already computes
+are parsed into a before/after line graph, not just the summary row).
 
 ### Read-count checks
 
 Each run fails if reads go missing:
 - **FASTQ → final:** fastp read total (before filtering, or after filtering when trimming)
-  equals the final file's primary reads (`samtools stats` raw total).
+  equals the final file's primary reads (`samtools flagstat` primary count, on the true
+  published file).
 - **Before → final:** records in the `fq2bam` output (FASTQ entry) or the input alignment
   (alignment entry) equal the final file's records.
 

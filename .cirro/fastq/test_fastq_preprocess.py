@@ -277,3 +277,13 @@ def test_form_offers_poly_g_trimming_auto_by_default_and_maps_it():
     mapping = json.loads((here / "process-input.json").read_text())
     assert mapping["poly_g_trimming"] == "$.dataset.params.read_trimming.poly_g_trimming"
     assert "trim_nextseq" not in mapping
+
+
+def test_form_offers_publish_raw_alignment_off_by_default_and_maps_it():
+    import json
+    here = pathlib.Path(__file__).parent
+    props = json.loads((here / "process-form.json").read_text())["form"]["properties"]
+    field = props["publish_raw_alignment"]
+    assert field["type"] == "boolean" and field["default"] is False
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["publish_raw_alignment"] == "$.dataset.params.publish_raw_alignment"

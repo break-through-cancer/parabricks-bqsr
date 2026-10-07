@@ -2,11 +2,11 @@ nextflow_function {
     name "Non-local filesystem paths: subworkflows/local/read_checks/main.nf"
     script "subworkflows/local/read_checks/main.nf"
 
-    test("samtoolsStatsCounts reads a non-default-filesystem Path") {
-        function "samtoolsStatsCounts"
+    test("samtoolsFlagstatCounts reads a non-default-filesystem Path") {
+        function "samtoolsFlagstatCounts"
         when { function { """
             def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
-            input[0] = fs.getPath('/qc/s.stats')
+            input[0] = fs.getPath('/qc/s.flagstat')
         """ } }
         then { assert function.result == [primary: 10, records: 13] }
     }
