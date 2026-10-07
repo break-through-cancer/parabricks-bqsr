@@ -232,6 +232,12 @@ nf-test test                           # modules, subworkflows, pipeline (needs 
 python -m pytest tests/config .cirro   # GPU config checks, Cirro preprocess (needs nextflow, pandas)
 ```
 
+Each nf-test case pays its own Nextflow engine start-up (several seconds), so the full suite
+is slower than its test count suggests. `scripts/test-parallel.sh [N]` splits it across N
+parallel `nf-test --shard` processes (default 4) for a full local run; extra arguments pass
+through to nf-test, e.g. `scripts/test-parallel.sh 4 --tag quantize`. For fast iteration on a
+single change, prefer `nf-test test --changedSince HEAD` or `--relatedTests` over a full run.
+
 Parabricks steps run under `-stub` locally; real execution needs an NVIDIA GPU. nf-test
 pulls the quantizer image from GHCR; to test local changes to the tool, build and tag it
 under the same name first:
