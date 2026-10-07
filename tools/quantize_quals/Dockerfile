@@ -26,7 +26,7 @@ RUN make test && make install PREFIX=/opt/quantize_quals
 
 FROM debian:bookworm-slim
 
-LABEL org.opencontainers.image.source="https://github.com/break-through-cancer/parabricks-bqsr" \
+LABEL org.opencontainers.image.source="https://github.com/break-through-cancer/parabricks-fq2bam-bqsr" \
       org.opencontainers.image.description="quantize_quals: GATK-compatible static quality-score quantization (HTSlib)" \
       org.opencontainers.image.version="0.1.2"
 

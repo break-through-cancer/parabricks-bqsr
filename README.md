@@ -1,4 +1,4 @@
-# parabricks_bqsr
+# parabricks-fq2bam-bqsr
 
 Nextflow pipeline for GPU alignment and base quality score recalibration with NVIDIA
 Parabricks. Starting from FASTQs (the main entry point) or from an existing alignment plus
@@ -120,29 +120,29 @@ is added. Local runs need a Linux host with an NVIDIA GPU.
 ### Settings by sequencing depth
 
 `fq2bam` is the costly step. Its host memory peaks in its last phase (duplicate marking,
-BQSR table, writing), and that peak grows with depth. `--fq2bam_gpus` and
-`--fq2bam_low_memory` change BWA speed and BWA memory; they do not change that peak. A
-memory kill restarts `fq2bam` from the beginning, and retries use 2× then 3× the memory.
-For deep samples, set `--fq2bam_memory_gb` (on Cirro: *fq2bam memory override*) so the
-first attempt succeeds.
+BQSR table, writing), and that peak grows with depth, not with `--fq2bam_gpus` or
+`--fq2bam_low_memory` (those change BWA speed and BWA memory only). A memory kill restarts
+`fq2bam` from the beginning; retries use 2× then 3× the memory. For deep samples, set
+`--fq2bam_memory_gb` (on Cirro: *fq2bam memory override*) so the first attempt succeeds
+instead of paying for one that doesn't.
 
 | Depth (WGS) | GPUs | Low-memory | `--fq2bam_memory_gb` | Basis |
 |---|---|---|---|---|
 | Low-pass (≤5x) | 1 | off | unset (64 GB) | Lowest cost. Not measured below 21x; memory is well below the 21x peak. |
 | About 20–30x | 2 (default) | off | unset (88 GB) | Measured at 21x: `fq2bam` 37.6 min, $0.77, peak 77 GB of 88. With 1 GPU: 48.8 min, $0.72. Near 30x the peak may pass 88 GB; the retry then uses 176 GB. |
-| About 60x | 2 | off | 176 | Not measured. The peak is expected well above 88 GB. |
-| About 100x and deeper | 2 | off | 176 or more | Measured at 105x with 1 GPU, low-memory on, 64 GB: BWA 5 h 15 min and sort 31 min completed, then the duplicate-marking phase was killed (Parabricks reported allocating above 91.4 GB); $6.09 lost. GATK MarkDuplicates on CPU peaked at 186 GB on the same sample. 176 GB is not yet tested. |
+| About 60x | 2 | off | 176 (estimate) | Not measured; interpolated between the 21x and 105x peaks. |
+| About 100x and deeper | 4 | off | 352 | Measured at 105x: 1 GPU/64 GB and 2 GPU/88 GB were each killed in the duplicate-marking/BQSR/write phase (GATK MarkDuplicates alone peaks at 186 GB on the same sample, for comparison). 2 GPU/176 GB was also killed, auto-retried at 352 GB (peak ~349 GiB), and succeeded. Starting directly at 4 GPUs/352 GB succeeded on the first attempt: `fq2bam` 88.9 min (align 50 min, sort 5.6 min, dedup+table+write 32 min), full pipeline 7.2 h wall, $6.99 total — against $115.80 and 3 days 15 h for sarek/CPU on the same sample. |
 
 Placement on g5: a g5.12xlarge has 4 GPUs, 48 vCPUs and 192 GB, and holds two default
 2-GPU jobs. Above about 92 GB, one 2-GPU job fills a g5.12xlarge or half a g5.24xlarge, so
-its hourly cost rises (about +43% per job on a g5.24xlarge). 4 GPUs get 176 GB by default
-on the same g5.12xlarge and align faster, but 4 GPUs with low-memory off run 8 BWA streams,
-which is untested at depth.
+its hourly cost rises (about +43% per job on a g5.24xlarge). A 352 GB job needs a whole
+g5.24xlarge regardless of GPU count, so 4 GPUs is the better choice at that memory tier:
+same cost, faster alignment.
 
-Other measured results (21x, 2 GPUs): a BAM intermediate (`--fq2bam_intermediate_fmt`,
-default) cost 9% less than CRAM with identical tables and read counts; `--gpuwrite` made no
-difference; the CPU-mode sort that Parabricks uses when duplicate metrics are requested took
-about 40–65 s.
+Other measured results (21x, 2 GPUs): the BAM intermediate (`--fq2bam_intermediate_fmt`,
+default) cost 9% less than CRAM with identical tables and read counts, mostly from a faster
+`applybqsr`; `--gpuwrite` made no difference; the CPU-mode sort that Parabricks uses when
+duplicate metrics are requested took about 40–65 s.
 
 ### Parameters
 
@@ -173,7 +173,7 @@ about 40–65 s.
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
 | `--round_down_quantized` | `false` | Round down to a bin instead of the nearest bin in probability space. |
-| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2` | Quantizer image; see `tools/quantize_quals/README.md`. |
+| `--quantize_quals_container` | `ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:0.1.2` | Quantizer image; see `tools/quantize_quals/README.md`. |
 
 Parameters are declared in `nextflow_schema.json` (nf-schema); the startup log prints the
 parameters that differ from their defaults, as nf-core pipelines do. A new parameter must be
@@ -237,7 +237,7 @@ pulls the quantizer image from GHCR; to test local changes to the tool, build an
 under the same name first:
 
 ```bash
-docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2 tools/quantize_quals
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:0.1.2 tools/quantize_quals
 ```
 
 Output content is decoded inside nf-test with the
@@ -267,7 +267,7 @@ single-end lane. Cirro ingest moves that column into the file list's `singleton`
 does not list the file itself (no read number, so no `paired_dnaseq` name pattern matches);
 the file is resolved next to the sample's read 1.
 
-**Registration settings:** repository `break-through-cancer/parabricks-bqsr`, entry
+**Registration settings:** repository `break-through-cancer/parabricks-fq2bam-bqsr`, entry
 script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
 `26.04.0` or later (required; nf-schema 2.8.0 needs it). A registration created
 before `.cirro/alignment/` existed must be re-pointed to that directory. Output file

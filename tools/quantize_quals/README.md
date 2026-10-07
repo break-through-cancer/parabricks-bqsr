@@ -81,8 +81,8 @@ The build stage runs `make test`, so a failing test fails the image build. Alway
 with the version in `src/main.c` (`QQ_VERSION`), never `latest`:
 
 ```bash
-docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-bqsr:<version> tools/quantize_quals
-docker push ghcr.io/break-through-cancer/parabricks-bqsr:<version>
+docker build --platform linux/amd64 -t ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:<version> tools/quantize_quals
+docker push ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:<version>
 ```
 
 Then update `params.quantize_quals_container` in `nextflow.config` to the new tag.

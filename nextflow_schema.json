@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/break-through-cancer/parabricks-bqsr/main/nextflow_schema.json",
-    "title": "parabricks-bqsr pipeline parameters",
+    "$id": "https://raw.githubusercontent.com/break-through-cancer/parabricks-fq2bam-bqsr/main/nextflow_schema.json",
+    "title": "parabricks-fq2bam-bqsr pipeline parameters",
     "description": "Parabricks alignment and genome-wide BQSR with optional GATK-compatible static quality-score quantization",
     "type": "object",
     "$defs": {
@@ -216,7 +216,7 @@
                 "quantize_quals_container": {
                     "type": "string",
                     "description": "Quantizer container image.",
-                    "default": "ghcr.io/break-through-cancer/parabricks-bqsr:0.1.2"
+                    "default": "ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:0.1.2"
                 },
                 "static_quantized_quals": {
                     "type": "string",
