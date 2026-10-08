@@ -7,39 +7,47 @@ from typing import Iterable
 import pandas as pd
 
 PARABRICKS_FILE = re.compile(r"(?:^|/)preprocessing/parabricks/(?P<sample>[^/]+)/(?P<name>[^/]+)$")
+MARKDUPLICATES_FILE = re.compile(r"(?:^|/)preprocessing/markduplicates/(?P<sample>[^/]+)/(?P<name>[^/]+)$")
+RECAL_TABLE_FILE = re.compile(r"(?:^|/)preprocessing/recal_table/(?P<sample>[^/]+)/(?P<name>[^/]+)$")
 INDEX_SUFFIX = {"bam": "bai", "cram": "crai"}
 COLUMNS = ["sample", "alignment", "alignment_index", "recal_table"]
 
 
 def build_samplesheet(paths: Iterable[str]) -> pd.DataFrame:
-    """Build the pipeline samplesheet from a sarek_align dataset's file paths.
+    """Build the pipeline samplesheet from an upstream dataset's file paths.
 
-    Uses only preprocessing/parabricks/<sample>/: the pre-BQSR fq2bam alignment, its
-    index and the recalibration table. Alignments from other stages (for example
-    recalibrated/) are never used, since applying the table again would recalibrate
-    those reads twice.
+    Accepts either sarek_align's layout (preprocessing/parabricks/<sample>/: the
+    pre-BQSR fq2bam alignment, its index and the recalibration table, co-located) or
+    this pipeline's own apply_bqsr=false output (preprocessing/markduplicates/<sample>/:
+    alignment and index; preprocessing/recal_table/<sample>/: the table, separately).
+    Alignments from other stages (for example recalibrated/) are never used, since
+    applying the table again would recalibrate those reads twice.
     """
     paths = list(paths)
     present = set(paths)
     found = defaultdict(lambda: {"alignments": [], "tables": []})
 
     for path in paths:
-        match = PARABRICKS_FILE.search(path)
-        if not match:
+        match = PARABRICKS_FILE.search(path) or MARKDUPLICATES_FILE.search(path)
+        if match:
+            name = match["name"]
+            ext = name.rsplit(".", 1)[-1]
+            if ext in INDEX_SUFFIX:
+                found[match["sample"]]["alignments"].append(path)
+            elif ext == "table":
+                found[match["sample"]]["tables"].append(path)
             continue
-        name = match["name"]
-        ext = name.rsplit(".", 1)[-1]
-        if ext in INDEX_SUFFIX:
-            found[match["sample"]]["alignments"].append(path)
-        elif ext == "table":
+        match = RECAL_TABLE_FILE.search(path)
+        if match and match["name"].endswith(".table"):
             found[match["sample"]]["tables"].append(path)
 
     if not found:
         raise ValueError(
-            "No files under preprocessing/parabricks/<sample>/ in the input dataset(s). "
-            "This pipeline needs the pre-BQSR fq2bam alignment and its recalibration "
-            "table from sarek_align (Parabricks aligner, known sites supplied, "
-            "save_mapped on, baserecalibrator skipped)."
+            "No files under preprocessing/parabricks/<sample>/ (sarek_align, Parabricks "
+            "aligner, known sites supplied, save_mapped on, baserecalibrator skipped) or "
+            "preprocessing/markduplicates/<sample>/ + preprocessing/recal_table/<sample>/ "
+            "(this pipeline's own apply_bqsr=false output) in the input dataset(s). This "
+            "pipeline needs the pre-BQSR alignment, its index, and the recalibration table."
         )
 
     rows, problems = [], []

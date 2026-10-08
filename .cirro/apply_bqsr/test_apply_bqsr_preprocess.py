@@ -37,16 +37,46 @@ def test_cram_and_multiple_samples_sorted():
     assert sheet.loc[1, "alignment_index"].endswith("S2.cram.crai")
 
 
-def test_other_stages_are_ignored():
+def test_recalibrated_stage_is_ignored():
+    # Applying the table again to an already-recalibrated alignment would recalibrate it twice.
     sheet = build_samplesheet(files(
         "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
         "recalibrated/S1/S1.recal.bam", "recalibrated/S1/S1.recal.bam.bai",
-        "markduplicates/S1/S1.md.cram", "markduplicates/S1/S1.md.cram.crai",
     ))
     assert sheet["alignment"].tolist() == [f"{ROOT}/parabricks/S1/S1.bam"]
 
 
-def test_no_parabricks_files():
+def test_our_own_markduplicates_layout_bam():
+    # This pipeline's own apply_bqsr=false output: alignment+index under markduplicates/,
+    # the table separately under recal_table/ -- not co-located like sarek_align's layout.
+    sheet = build_samplesheet(files(
+        "markduplicates/S1/S1.md.bam", "markduplicates/S1/S1.md.bam.bai", "recal_table/S1/S1.table",
+    ))
+    assert sheet.to_dict("records") == [{
+        "sample": "S1",
+        "alignment": f"{ROOT}/markduplicates/S1/S1.md.bam",
+        "alignment_index": f"{ROOT}/markduplicates/S1/S1.md.bam.bai",
+        "recal_table": f"{ROOT}/recal_table/S1/S1.table",
+    }]
+
+
+def test_our_own_markduplicates_layout_cram():
+    sheet = build_samplesheet(files(
+        "markduplicates/S1/S1.md.cram", "markduplicates/S1/S1.md.cram.crai", "recal_table/S1/S1.table",
+    ))
+    assert sheet.loc[0, "alignment"].endswith("S1.md.cram")
+    assert sheet.loc[0, "alignment_index"].endswith("S1.md.cram.crai")
+
+
+def test_sarek_and_our_own_layout_in_the_same_batch():
+    sheet = build_samplesheet(files(
+        "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
+        "markduplicates/S2/S2.md.bam", "markduplicates/S2/S2.md.bam.bai", "recal_table/S2/S2.table",
+    ))
+    assert list(sheet["sample"]) == ["S1", "S2"]
+
+
+def test_no_recognized_files():
     with pytest.raises(ValueError, match="preprocessing/parabricks"):
         build_samplesheet(files("recalibrated/S1/S1.recal.bam", "recalibrated/S1/S1.recal.bam.bai"))
 
