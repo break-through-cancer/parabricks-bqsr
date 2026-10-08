@@ -54,10 +54,11 @@ process QUANTIZE_QUALS {
     {
         echo "# id: 'quantize_quals_hist'"
         echo "# section_name: 'Quality-score distribution, before vs after quantization'"
-        echo "# plot_type: 'linegraph'"
+        echo "# plot_type: 'bargraph'"
         echo "# pconfig:"
         echo "#     xlab: 'Quality score'"
         echo "#     ylab: '% of bases'"
+        echo "#     stacking: null"
         printf 'Category\\tbefore\\tafter\\n'
         join -t '\t' -a1 -a2 -e 0 -o 0,1.2,2.2 before.sorted.tsv after.sorted.tsv | awk -F'\\t' '{sub(/^0/,"",\$1); print "Q"\$1"\\t"\$2"\\t"\$3}'
     } > ${meta.sample}.quantize_hist_mqc.tsv

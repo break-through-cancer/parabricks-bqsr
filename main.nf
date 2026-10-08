@@ -81,11 +81,11 @@ workflow {
         // the table is, unconditionally, by PARABRICKS_FQ2BAM/MARKDUP's own publishDir) -- an
         // alignment-entry run can later apply BQSR against it, with any quantization choice,
         // without repeating alignment. No effect without known sites: the published .md file
-        // already is this alignment.
+        // already is this alignment. Follows --output_fmt, same as the final output.
         if (bqsr && params.publish_raw_alignment.toString() == 'true') {
             SAMTOOLS_FINALIZE_RAW(
                 aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] },
-                ref_ch, 'cram'
+                ref_ch, params.output_fmt
             )
         }
 
