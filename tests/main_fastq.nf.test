@@ -30,14 +30,59 @@ nextflow_pipeline {
             }
         }
     }
-    test("publish_raw_alignment: also publishes the pre-recalibration alignment as CRAM at cram_version") {
+    test("apply_bqsr false: align only, publishing .md and the table, skipping APPLYBQSR and quantization") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
             ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
             bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
             known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
             intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
-            publish_raw_alignment = true
+            apply_bqsr = false
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 0
+            assert ok.count { it.startsWith('QUANTIZE_QUALS') } == 0
+            assert ok.count { it.startsWith('SAMTOOLS_FINALIZE') } == 2
+            assert ok.count { it.startsWith('SAMTOOLS_STATS') } == 2
+            assert ok.count { it.startsWith('SAMTOOLS_FLAGSTAT') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
+                assert file("${outputDir}/results/reports/samtools/${s}/${s}.stats").exists()
+                assert file("${outputDir}/results/reports/samtools/${s}/${s}.flagstat").exists()
+                assert !file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+            }
+        }
+    }
+    test("apply_bqsr has no effect without known sites") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            apply_bqsr = false
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('QUANTIZE_QUALS') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+            }
+        }
+    }
+    test("publish_markduplicates: also publishes the markduplicates alignment as CRAM at cram_version") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            publish_markduplicates = true
             cram_version = '3.1'
             outdir = "${outputDir}/results"
         } }
@@ -53,14 +98,14 @@ nextflow_pipeline {
             }
         }
     }
-    test("publish_raw_alignment follows output_fmt: bam publishes the raw alignment as BAM too") {
+    test("publish_markduplicates follows output_fmt: bam publishes the markduplicates alignment as BAM too") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
             ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
             bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
             known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
             intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
-            publish_raw_alignment = true
+            publish_markduplicates = true
             output_fmt = 'bam'
             outdir = "${outputDir}/results"
         } }
@@ -74,12 +119,12 @@ nextflow_pipeline {
             }
         }
     }
-    test("publish_raw_alignment is a no-op without known sites: nothing extra is published") {
+    test("publish_markduplicates is a no-op without known sites: nothing extra is published") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
             ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
             bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
-            publish_raw_alignment = true
+            publish_markduplicates = true
             outdir = "${outputDir}/results"
         } }
         then {

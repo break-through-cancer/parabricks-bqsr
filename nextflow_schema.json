@@ -181,6 +181,11 @@
                     "minimum": 16,
                     "maximum": 768,
                     "description": "Override fq2bam's first-attempt host memory (GB); retries multiply it by the attempt number. Unset: 44 GB per GPU, at least 64. For deep samples (about 60x and up), e.g. 176 with 2 GPUs."
+                },
+                "apply_bqsr": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "FASTQ entry with known sites: run applybqsr (and quantization) in this same run. false aligns only, publishing the markduplicates alignment and BQSR table as the run's output (quantization does not run, regardless of --quantize_quals_enabled); apply BQSR later with a separate alignment-entry run against them, choosing quantization then. No effect without known sites, or on the alignment entry (which always applies BQSR)."
                 }
             }
         },
@@ -208,7 +213,7 @@
                         "3.1"
                     ]
                 },
-                "publish_raw_alignment": {
+                "publish_markduplicates": {
                     "type": "boolean",
                     "default": false,
                     "description": "Also publish the pre-BQSR alignment (FASTQ entry, with known sites only) as an indexed file in --output_fmt (CRAM at --cram_version, or BAM), alongside the already-published BQSR table. Lets a later alignment-entry run apply BQSR -- with a different quantization choice, or none -- without repeating alignment. No effect without known sites, since the published .md file already is the pre-recalibration alignment. Off by default: as CRAM, it runs roughly 2-3x the size of the final quantized output, recurring in storage for as long as it's kept; as BAM, larger still."

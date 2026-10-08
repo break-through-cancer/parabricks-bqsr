@@ -15,11 +15,11 @@ FASTP (per lane: read counts, read QC,           │
 PARABRICKS_FQ2BAM (per sample, GPU:              │
   alignment, duplicate marking, BQSR table)      │
       │                                          │
-      ├─ known sites ─▶ PARABRICKS_APPLYBQSR (GPU, genome-wide) ◀─┘
+      ├─ known sites, apply_bqsr ─▶ PARABRICKS_APPLYBQSR (GPU, genome-wide) ◀─┘
       │                        │
       │                QUANTIZE_QUALS or SAMTOOLS_FINALIZE
       │                        └─▶ preprocessing/recalibrated/<s>/<s>.recal.<cram|bam>
-      └─ no known sites ─▶ QUANTIZE_QUALS or SAMTOOLS_FINALIZE
+      └─ no known sites, or apply_bqsr=false ─▶ QUANTIZE_QUALS or SAMTOOLS_FINALIZE
                                └─▶ preprocessing/markduplicates/<s>/<s>.md.<cram|bam>
 
 QC: samtools stats, mosdepth (skipped for CRAM 3.1), read-count checks, MultiQC
@@ -167,9 +167,10 @@ duplicate metrics are requested took about 40–65 s.
 | `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Turning it off made no measurable difference on one GPU; not shown on the Cirro form. |
 | `--fq2bam_intermediate_fmt` | `bam` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `bam` or `cram`. Not published; final outputs follow `--output_fmt`. BAM was 9% cheaper on a 21x sample with identical results (applybqsr 41% faster). Not shown on the Cirro form. |
 | `--fq2bam_memory_gb` | unset | Override `fq2bam`'s first-attempt host memory in GB (16–768); retries multiply it by the attempt number and `--memory-limit` stays at half. Unset: 44 GB per GPU, at least 64. See *Settings by sequencing depth*. |
+| `--apply_bqsr` | `true` | FASTQ entry with known sites: run `applybqsr` (and quantization) in this same run. `false` aligns only, publishing the markduplicates alignment and BQSR table as this run's output — quantization does not run, regardless of `--quantize_quals_enabled` — to apply BQSR later with a separate alignment-entry run against them, choosing quantization then. No effect without known sites, or on the alignment entry (which always applies BQSR). |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
-| `--publish_raw_alignment` | `false` | FASTQ entry with known sites only: also publish the pre-BQSR, duplicate-marked alignment as an indexed file in `--output_fmt` (`preprocessing/markduplicates/<s>/<s>.md.cram` or `.md.bam`), alongside the BQSR table that's already published there. Lets a later alignment-entry run apply BQSR — with a different quantization choice, or none — without repeating alignment. No effect without known sites (the published `.md` file already is this alignment). Off by default: measured on real data, the CRAM form runs about 2.4x the size of the final quantized CRAM (quantization alone, independent of CRAM's own compression, cut file size by more than half here) — on a 105x sample (77.6 GB final CRAM) that's roughly 185 GB extra, recurring for as long as it's kept; BAM is larger still. Weigh that against the cost of the alignment it saves re-running (105x `fq2bam`: $4.97, 89 min). |
+| `--publish_markduplicates` | `false` | FASTQ entry with known sites only: also publish the pre-BQSR, duplicate-marked alignment as an indexed file in `--output_fmt` (`preprocessing/markduplicates/<s>/<s>.md.cram` or `.md.bam`), alongside the BQSR table that's already published there. Lets a later alignment-entry run apply BQSR — with a different quantization choice, or none — without repeating alignment. No effect without known sites (the published `.md` file already is this alignment). Off by default: measured on real data, the CRAM form runs about 2.4x the size of the final quantized CRAM (quantization alone, independent of CRAM's own compression, cut file size by more than half here) — on a 105x sample (77.6 GB final CRAM) that's roughly 185 GB extra, recurring for as long as it's kept; BAM is larger still. Weigh that against the cost of the alignment it saves re-running (105x `fq2bam`: $4.97, 89 min). |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
@@ -201,7 +202,7 @@ compression (`-z 1`). For reference, nf-core/sarek's fastp (12 threads) took 45 
 
 ```
 preprocessing/recalibrated/<s>/<s>.recal.<cram|bam> (+ index)   BQSR ran
-preprocessing/markduplicates/<s>/<s>.md.<cram|bam> (+ index)    no known sites, or --publish_raw_alignment
+preprocessing/markduplicates/<s>/<s>.md.<cram|bam> (+ index)    no known sites, --apply_bqsr false, or --publish_markduplicates
 preprocessing/recal_table/<s>/<s>.table                          FASTQ entry with known sites
 preprocessing/fastp/<s>/                                         --save_trimmed only
 reports/fastp/<s>/, reports/markduplicates/<s>/, reports/parabricks_qc/<s>/,
@@ -212,8 +213,11 @@ pipeline_info/
 
 The layout matches nf-core/sarek, so sarek-based variant calling (including Cirro's
 `sarek_call_variants`) recognises the outputs. The intermediate `applybqsr` BAM is never
-published. The pre-BQSR `fq2bam`/`markdup` alignment is published only via
-`--publish_raw_alignment` (see *Parameters*); otherwise it's discarded once BQSR has run.
+published. With `--apply_bqsr false` (known sites, FASTQ entry), the `fq2bam`/`markdup`
+alignment and BQSR table *are* this run's output — align now, apply BQSR later with a
+separate alignment-entry run against them, choosing quantization then. With `--apply_bqsr`
+at its default `true`, that alignment is published only via `--publish_markduplicates` (see
+*Parameters*); otherwise it's discarded once BQSR has run.
 
 `reports/samtools/<s>/<s>.stats` (full `samtools stats`, error rate/insert size/GC bias/etc.)
 reads the pre-quantization alignment, not the published file: BQSR and quantization only

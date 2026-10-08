@@ -279,11 +279,32 @@ def test_form_offers_poly_g_trimming_auto_by_default_and_maps_it():
     assert "trim_nextseq" not in mapping
 
 
-def test_form_offers_publish_raw_alignment_off_by_default_and_maps_it():
+def test_form_offers_publish_markduplicates_off_by_default_and_maps_it():
     import json
     here = pathlib.Path(__file__).parent
     props = json.loads((here / "process-form.json").read_text())["form"]["properties"]
-    field = props["publish_raw_alignment"]
+    field = props["publish_markduplicates"]
     assert field["type"] == "boolean" and field["default"] is False
     mapping = json.loads((here / "process-input.json").read_text())
-    assert mapping["publish_raw_alignment"] == "$.dataset.params.publish_raw_alignment"
+    assert mapping["publish_markduplicates"] == "$.dataset.params.publish_markduplicates"
+
+
+def test_form_offers_apply_bqsr_on_by_default_and_maps_it():
+    import json
+    here = pathlib.Path(__file__).parent
+    props = json.loads((here / "process-form.json").read_text())["form"]["properties"]
+    field = props["apply_bqsr"]
+    assert field["type"] == "boolean" and field["default"] is True
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["apply_bqsr"] == "$.dataset.params.apply_bqsr"
+
+
+def test_quantization_section_only_offered_when_apply_bqsr_is_on():
+    import json
+    form = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]
+    assert "quantization" not in form["properties"]
+    branches = form["dependencies"]["apply_bqsr"]["oneOf"]
+    on_branch = [b for b in branches if b["properties"]["apply_bqsr"]["enum"] == [True]][0]
+    off_branch = [b for b in branches if b["properties"]["apply_bqsr"]["enum"] == [False]][0]
+    assert on_branch["properties"]["quantization"]["properties"]["quantize_quals_enabled"]["default"] is True
+    assert "quantization" not in off_branch["properties"]

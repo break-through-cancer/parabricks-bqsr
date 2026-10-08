@@ -33,6 +33,7 @@ workflow {
 
     if (entry == 'fastq') {
         def bqsr = refs.known_sites as boolean
+        def apply_bqsr = bqsr && params.apply_bqsr.toString() != 'false'
         log.info intervalsMessage(refs)
         if (!bqsr) log.warn "No known sites supplied: BQSR is skipped; outputs are published as .md files under preprocessing/markduplicates/"
 
@@ -82,14 +83,14 @@ workflow {
         // alignment-entry run can later apply BQSR against it, with any quantization choice,
         // without repeating alignment. No effect without known sites: the published .md file
         // already is this alignment. Follows --output_fmt, same as the final output.
-        if (bqsr && params.publish_raw_alignment.toString() == 'true') {
+        if (apply_bqsr && params.publish_markduplicates.toString() == 'true') {
             SAMTOOLS_FINALIZE_RAW(
                 aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] },
                 ref_ch, params.output_fmt
             )
         }
 
-        if (bqsr) {
+        if (apply_bqsr) {
             PARABRICKS_APPLYBQSR(
                 aligned_cram.join(aligned_table, failOnMismatch: true)
                     .map { meta, cram, crai, table -> [[sample: meta.sample], cram, crai, table] },
@@ -99,6 +100,11 @@ workflow {
         } else {
             to_finish = aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] }
         }
+        // Known sites but apply_bqsr=false: BQSR is deliberately deferred to a later
+        // alignment-entry run, so quantization (a choice that belongs with it) is too --
+        // regardless of --quantize_quals_enabled. Without known sites there is no later run
+        // to defer to, so quantization applies now as usual.
+        quantize = quantize && (apply_bqsr || !bqsr)
         before_idxstats = PARABRICKS_FQ2BAM.out.idxstats.mix(PARABRICKS_MARKDUP.out.idxstats)
             .map { meta, idx -> [[sample: meta.sample], idx] }
         extra_qc = FASTP.out.json.map { it[1] }
@@ -157,7 +163,8 @@ def validateParams() {
     if (!params.input) error "Missing required parameter: input (path to samplesheet CSV). See README.md and assets/samplesheet.csv."
     if (!(params.output_fmt in ['bam', 'cram'])) error "Invalid output_fmt '${params.output_fmt}': must be 'bam' or 'cram'"
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
-    if (!(params.publish_raw_alignment.toString() in ['true', 'false'])) error "Invalid publish_raw_alignment '${params.publish_raw_alignment}': must be true or false"
+    if (!(params.publish_markduplicates.toString() in ['true', 'false'])) error "Invalid publish_markduplicates '${params.publish_markduplicates}': must be true or false"
+    if (!(params.apply_bqsr.toString() in ['true', 'false'])) error "Invalid apply_bqsr '${params.apply_bqsr}': must be true or false"
     if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
     if (!(params.poly_g_trimming in ['auto', 'on', 'off'])) error "Invalid poly_g_trimming '${params.poly_g_trimming}': must be 'auto', 'on' or 'off'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"

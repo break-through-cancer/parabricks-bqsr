@@ -161,40 +161,17 @@
         ],
         "default": "3.0"
       },
-      "publish_raw_alignment": {
-        "title": "Publish raw (pre-BQSR) alignment",
+      "publish_markduplicates": {
+        "title": "Publish duplicate-marked (pre-BQSR) alignment",
         "type": "boolean",
         "default": false,
         "description": "Also publish the duplicate-marked alignment from before BQSR, in the Output Format above (CRAM at the CRAM Version above, for long-term storage, or BAM). Only has an effect when known sites are supplied; a later alignment-entry run can then apply BQSR -- with any quantization choice -- without repeating alignment. Off by default: this extra file runs roughly 2-3x the size of the final quantized output (CRAM) or larger (BAM)."
       },
-      "quantization": {
-        "title": "Quality-Score Quantization",
-        "type": "object",
-        "properties": {
-          "quantize_quals_enabled": {
-            "title": "Quantize Quality Scores",
-            "type": "boolean",
-            "default": true
-          },
-          "static_quantized_quals": {
-            "title": "Static Quantization Bins",
-            "type": "string",
-            "default": "10,20,30",
-            "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"
-          },
-          "preserve_qscores_less_than": {
-            "title": "Preserve Quality Scores Below",
-            "type": "integer",
-            "default": 6,
-            "minimum": 0,
-            "maximum": 93
-          },
-          "round_down_quantized": {
-            "title": "Round Down",
-            "type": "boolean",
-            "default": false
-          }
-        }
+      "apply_bqsr": {
+        "title": "Apply BQSR",
+        "type": "boolean",
+        "default": true,
+        "description": "Run applybqsr (and quantization) in this same run. Off: align only, publishing the markduplicates alignment and BQSR table as this run's output; apply BQSR later with a separate alignment-entry run against them, choosing quantization then. No effect without known sites."
       },
       "read_trimming": {
         "title": "Read Trimming (fastp)",
@@ -296,6 +273,51 @@
             "description": "Leave empty for the default (44 GB per GPU, at least 64). For deep samples (about 60x and up) set e.g. 176 with 2 GPUs so the first attempt is not killed for memory. Retries double and triple it."
           }
         }
+      }
+    },
+    "dependencies": {
+      "apply_bqsr": {
+        "oneOf": [
+          {
+            "properties": {
+              "apply_bqsr": { "enum": [true] },
+              "quantization": {
+                "title": "Quality-Score Quantization",
+                "type": "object",
+                "properties": {
+                  "quantize_quals_enabled": {
+                    "title": "Quantize Quality Scores",
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "static_quantized_quals": {
+                    "title": "Static Quantization Bins",
+                    "type": "string",
+                    "default": "10,20,30",
+                    "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"
+                  },
+                  "preserve_qscores_less_than": {
+                    "title": "Preserve Quality Scores Below",
+                    "type": "integer",
+                    "default": 6,
+                    "minimum": 0,
+                    "maximum": 93
+                  },
+                  "round_down_quantized": {
+                    "title": "Round Down",
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "apply_bqsr": { "enum": [false] }
+            }
+          }
+        ]
       }
     }
   },
