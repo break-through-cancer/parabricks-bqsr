@@ -58,6 +58,29 @@ nextflow_pipeline {
             }
         }
     }
+    test("apply_bqsr false with matching formats: fq2bam publishes .md directly, skipping SAMTOOLS_FINALIZE") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            apply_bqsr = false
+            output_fmt = 'bam'
+            fq2bam_intermediate_fmt = 'bam'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert ok.count { it.startsWith('SAMTOOLS_FINALIZE') } == 0
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam.bai").exists()
+            }
+        }
+    }
     test("apply_bqsr has no effect without known sites") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
@@ -220,6 +243,29 @@ nextflow_pipeline {
             assert file("${out}/reports/markduplicates/S1/S1.duplicate-metrics.txt").exists()
             assert file("${out}/reports/parabricks_qc/S1/S1_qc_metrics").exists()
             assert file("${out}/preprocessing/recalibrated/S1/S1.recal.cram").exists()
+        }
+    }
+
+    test("mixed paired/singleton sample, apply_bqsr false: markdup publishes .md directly too") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq_mixed.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            apply_bqsr = false
+            output_fmt = 'bam'
+            fq2bam_intermediate_fmt = 'bam'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_MARKDUP') } == 1
+            assert ok.count { it.startsWith('SAMTOOLS_FINALIZE') } == 0
+            def out = "${outputDir}/results"
+            assert file("${out}/preprocessing/markduplicates/S1/S1.md.bam").exists()
+            assert file("${out}/preprocessing/markduplicates/S1/S1.md.bam.bai").exists()
         }
     }
 

@@ -30,10 +30,22 @@ workflow {
 
     ref_ch = Channel.value([file(refs.ref_fasta, checkIfExists: true), file(refs.ref_fasta_fai, checkIfExists: true)])
     def quantize = params.quantize_quals_enabled.toString() == 'true'
+    // Whenever applybqsr runs and nothing will quantize its output, applybqsr indexes its own
+    // BAM directly (see PARABRICKS_APPLYBQSR) and publishes it itself -- skipping a separate
+    // SAMTOOLS_FINALIZE task that would otherwise re-stage and re-index a potentially large file
+    // for no real transformation. Pure --output_fmt/--quantize_quals_enabled check: wherever
+    // applybqsr runs, quantize already equals quantize_quals_enabled exactly (see below).
+    def applybqsr_direct = params.output_fmt == 'bam' && !quantize
+    def use_direct_final = false
+    def direct_final = channel.empty()
 
     if (entry == 'fastq') {
         def bqsr = refs.known_sites as boolean
         def apply_bqsr = bqsr && params.apply_bqsr.toString() != 'false'
+        // Known sites, BQSR deferred: fq2bam/markdup's own alignment+index is the run's output,
+        // so if it is already in --output_fmt, publish it directly instead of launching
+        // SAMTOOLS_FINALIZE only to re-stage and re-index a file that needs neither.
+        def md_direct = !apply_bqsr && params.fq2bam_intermediate_fmt == params.output_fmt
         log.info intervalsMessage(refs)
         if (!bqsr) log.warn "No known sites supplied: BQSR is skipped; outputs are published as .md files under preprocessing/markduplicates/"
 
@@ -55,7 +67,7 @@ workflow {
                 def m = ordered[0][0]
                 [[sample: m.sample, patient: m.patient, status: m.status,
                   single_end: ordered.every { it[0].single_end }, lane_single_end: ordered.collect { it[0].single_end },
-                  read_groups: ordered.collect { it[0].read_group }], ordered.collectMany { it[1] }]
+                  read_groups: ordered.collect { it[0].read_group }, publish_directly: md_direct], ordered.collectMany { it[1] }]
             }
 
         PREPARE_KNOWN_SITES(refs.known_sites)
@@ -97,8 +109,17 @@ workflow {
                 ref_ch
             )
             to_finish = PARABRICKS_APPLYBQSR.out.bam.map { meta, bam -> [meta + [suffix: 'recal'], bam] }
+            if (applybqsr_direct) {
+                use_direct_final = true
+                direct_final = PARABRICKS_APPLYBQSR.out.bam.join(PARABRICKS_APPLYBQSR.out.bai)
+                    .map { meta, bam, bai -> [meta + [suffix: 'recal'], bam, bai] }
+            }
         } else {
             to_finish = aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] }
+            if (md_direct) {
+                use_direct_final = true
+                direct_final = aligned_cram.map { meta, cram, crai -> [[sample: meta.sample, suffix: 'md'], cram, crai] }
+            }
         }
         // Known sites but apply_bqsr=false: BQSR is deliberately deferred to a later
         // alignment-entry run, so quantization (a choice that belongs with it) is too --
@@ -114,6 +135,11 @@ workflow {
         SAMPLESHEET_TO_SAMPLES(params.input)
         PARABRICKS_APPLYBQSR(SAMPLESHEET_TO_SAMPLES.out.samples, ref_ch)
         to_finish = PARABRICKS_APPLYBQSR.out.bam.map { meta, bam -> [meta + [suffix: 'recal'], bam] }
+        if (applybqsr_direct) {
+            use_direct_final = true
+            direct_final = PARABRICKS_APPLYBQSR.out.bam.join(PARABRICKS_APPLYBQSR.out.bai)
+                .map { meta, bam, bai -> [meta + [suffix: 'recal'], bam, bai] }
+        }
         before_idxstats = PARABRICKS_APPLYBQSR.out.idxstats
         extra_qc = Channel.empty()
     }
@@ -122,6 +148,11 @@ workflow {
         QUANTIZE_QUALS(to_finish, ref_ch, params.output_fmt)
         final_ch = QUANTIZE_QUALS.out.alignment
         quant_mqc = QUANTIZE_QUALS.out.mqc.mix(QUANTIZE_QUALS.out.hist)
+    } else if (use_direct_final) {
+        // Already in --output_fmt with a valid index from the process that made it --
+        // nothing left to do; avoids staging a potentially large file through an extra task.
+        final_ch = direct_final
+        quant_mqc = channel.empty()
     } else {
         SAMTOOLS_FINALIZE(to_finish, ref_ch, params.output_fmt)
         final_ch = SAMTOOLS_FINALIZE.out.alignment

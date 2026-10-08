@@ -34,7 +34,7 @@ nextflow_pipeline {
         }
     }
 
-    test("quantization disabled: every sample goes APPLYBQSR -> SAMTOOLS_FINALIZE and is published as indexed BAM") {
+    test("quantization disabled, BAM output: APPLYBQSR indexes and publishes directly, skipping SAMTOOLS_FINALIZE") {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
@@ -49,13 +49,36 @@ nextflow_pipeline {
         then {
             assert workflow.success
             def succeeded = workflow.trace.succeeded()*.name
-            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
+            assert succeeded.count { it.contains('PARABRICKS_APPLYBQSR') } == 2
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 0
             assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 0
             ['SAMPLE_A', 'SAMPLE_B'].each { s ->
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam.bai").exists()
             }
             assert file("${outputDir}/results/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("quantization disabled, CRAM output (default): SAMTOOLS_FINALIZE still runs -- APPLYBQSR only indexes for BAM") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = false
+            }
+        }
+        then {
+            assert workflow.success
+            def succeeded = workflow.trace.succeeded()*.name
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
+            ['SAMPLE_A', 'SAMPLE_B'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram.crai").exists()
+            }
         }
     }
 

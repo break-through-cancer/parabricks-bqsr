@@ -219,6 +219,12 @@ separate alignment-entry run against them, choosing quantization then. With `--a
 at its default `true`, that alignment is published only via `--publish_markduplicates` (see
 *Parameters*); otherwise it's discarded once BQSR has run.
 
+When the alignment that would be published is already in `--output_fmt` with no quantization
+pending, the step that produced it (`fq2bam`/`markdup`, or `applybqsr`) indexes it in place and
+publishes it directly, instead of a separate finalize task re-staging and re-indexing a
+potentially large file for no real transformation. `SAMTOOLS_FINALIZE` then does not appear in
+that run's task list at all; this is expected, not an error.
+
 `reports/samtools/<s>/<s>.stats` (full `samtools stats`, error rate/insert size/GC bias/etc.)
 reads the pre-quantization alignment, not the published file: BQSR and quantization only
 rewrite quality bytes, never alignment or mismatches, so every field it reports is identical
