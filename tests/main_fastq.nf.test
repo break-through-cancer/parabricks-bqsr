@@ -1,0 +1,213 @@
+nextflow_pipeline {
+    name "Test main.nf FASTQ entry"
+    script "main.nf"
+    options "-stub"
+    config "tests/main_fastq.nf.config"
+
+    test("with known sites: FASTP per lane, FQ2BAM per sample, APPLYBQSR, recalibrated outputs and table") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('FASTP') } == 3
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 2
+            assert ok.count { it.startsWith('SAMTOOLS_STATS') } == 2
+            assert ok.count { it.startsWith('SAMTOOLS_FLAGSTAT') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
+                assert file("${outputDir}/results/reports/samtools/${s}/${s}.stats").exists()
+                assert file("${outputDir}/results/reports/samtools/${s}/${s}.flagstat").exists()
+                assert !file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+            }
+        }
+    }
+    test("publish_raw_alignment: also publishes the pre-recalibration alignment as CRAM at cram_version") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            publish_raw_alignment = true
+            cram_version = '3.1'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('SAMTOOLS_FINALIZE_RAW') } == 2
+            ['S1', 'S2'].each { s ->
+                // The recalibrated, quantized final output is unaffected -- this is an extra artifact.
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram.crai").exists()
+            }
+        }
+    }
+    test("publish_raw_alignment follows output_fmt: bam publishes the raw alignment as BAM too") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            publish_raw_alignment = true
+            output_fmt = 'bam'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam.bai").exists()
+                assert !file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+            }
+        }
+    }
+    test("publish_raw_alignment is a no-op without known sites: nothing extra is published") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            publish_raw_alignment = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('SAMTOOLS_FINALIZE_RAW') } == 0
+        }
+    }
+    test("without known sites: no APPLYBQSR, md outputs under markduplicates") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 0
+            assert file("${outputDir}/results/preprocessing/markduplicates/S1/S1.md.cram").exists()
+            def log = file("${outputDir}/../meta/nextflow.log").text
+            assert log.contains('No known sites supplied: BQSR is skipped')
+            assert log.contains('No intervals supplied')
+        }
+    }
+    test("default (trimming off, poly-G auto): fq2bam consumes fastp's poly-G-trimmed reads") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            save_trimmed = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert file("${outputDir}/results/preprocessing/fastp/S1/S1_1_1.trimmed.fastq.gz").exists()
+        }
+    }
+
+    test("poly-G off and trimming off: fq2bam reads the original FASTQs and nothing is written") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            poly_g_trimming = 'off'
+            save_trimmed = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            def published = file("${outputDir}/results/preprocessing/fastp")
+            assert !published.exists() || published.listFiles().every { dir -> !dir.listFiles().any { it.name.endsWith('.fastq.gz') } }
+        }
+    }
+
+    test("trimming on: fq2bam consumes fastp's trimmed reads") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            trim_fastq = true
+            save_trimmed = true
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
+            assert file("${outputDir}/results/preprocessing/fastp/S1/S1_1_1.trimmed.fastq.gz").exists()
+            assert file("${outputDir}/results/preprocessing/markduplicates/S2/S2.md.cram").exists()
+        }
+    }
+    test("a sample with paired lanes and a singleton lane: one fq2bam per input kind, then one markdup over all reads") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq_mixed.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            def ok = workflow.trace.succeeded()*.name
+            assert ok.count { it.startsWith('FASTP') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM_PART') } == 2
+            assert ok.count { it.startsWith('PARABRICKS_FQ2BAM ') } == 0
+            assert ok.count { it.startsWith('PARABRICKS_MARKDUP') } == 1
+            assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 1
+            def out = "${outputDir}/results"
+            assert file("${out}/preprocessing/recal_table/S1/S1.table").exists()
+            assert file("${out}/reports/markduplicates/S1/S1.duplicate-metrics.txt").exists()
+            assert file("${out}/reports/parabricks_qc/S1/S1_qc_metrics").exists()
+            assert file("${out}/preprocessing/recalibrated/S1/S1.recal.cram").exists()
+        }
+    }
+
+    test("a CRAM intermediate between fq2bam and applybqsr gives the same published outputs") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa"
+            known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
+            fq2bam_intermediate_fmt = 'cram'
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.success
+            assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 2
+            ['S1', 'S2'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
+            }
+        }
+    }
+
+    test("a mismatched BWA index stops the run before any task") {
+        when { params {
+            input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
+            ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
+            bwa_index = "${projectDir}/tests/fixtures/genome/bwa_mismatch"
+            outdir = "${outputDir}/results"
+        } }
+        then {
+            assert workflow.failed
+            assert workflow.stdout.join('\n').contains('does not match')
+            assert workflow.trace.tasks().size() == 0
+        }
+    }
+}

@@ -1,0 +1,19 @@
+nextflow_process {
+    name "Test MULTIQC"
+    script "modules/local/multiqc.nf"
+    process "MULTIQC"
+    test("builds a report from samtools stats") {
+        setup {
+            run("SAMTOOLS_STATS") {
+                script "modules/local/samtools_stats.nf"
+                process { """
+                    def m = "\${projectDir}/tests/fixtures/modules"
+                    input[0] = [[sample: 'S'], file("\$m/sample.bam")]
+                    input[1] = [file("\$m/reference.fasta"), file("\$m/reference.fasta.fai")]
+                """ }
+            }
+        }
+        when { process { "input[0] = SAMTOOLS_STATS.out.stats.map { it[1] }.collect()" } }
+        then { assert process.success; assert file(process.out.report[0]).name == 'multiqc_report.html' }
+    }
+}

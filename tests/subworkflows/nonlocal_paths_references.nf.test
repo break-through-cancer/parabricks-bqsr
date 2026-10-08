@@ -1,0 +1,23 @@
+nextflow_function {
+    name "Non-local filesystem paths: subworkflows/local/references/main.nf"
+    script "subworkflows/local/references/main.nf"
+
+    test("annContigs reads a non-default-filesystem Path (as on S3)") {
+        function "annContigs"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/bwa/reference.fasta.64.ann')
+        """ } }
+        then { assert function.result == ['chrT': 500] }
+    }
+
+    test("faiContigs reads a non-default-filesystem Path") {
+        function "faiContigs"
+        when { function { """
+            def fs = java.nio.file.FileSystems.newFileSystem(java.nio.file.Paths.get("\${projectDir}/tests/fixtures/genome/nonlocal_fs.zip"))
+            input[0] = fs.getPath('/ref/reference.fasta.fai')
+        """ } }
+        then { assert function.result == ['chrT': 500] }
+    }
+
+}

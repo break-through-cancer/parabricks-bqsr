@@ -1,0 +1,21 @@
+nextflow_process {
+    name "Test TABIX_VCF"
+    script "modules/local/tabix_vcf.nf"
+    process "TABIX_VCF"
+
+    test("indexes a bgzip-compressed VCF") {
+        when { process { "input[0] = [0, file(\"\${projectDir}/tests/fixtures/genome/known_sites_nocontig.vcf.gz\")]" } }
+        then {
+            assert process.success
+            assert process.out[0][0][0] == 0
+            assert file(process.out[0][0][2]).name == 'known_sites_nocontig.vcf.gz.tbi'
+        }
+    }
+    test("a plain-gzip VCF fails with a bgzip message") {
+        when { process { "input[0] = [0, file(\"\${projectDir}/tests/fixtures/genome/known_sites_plaingzip.vcf.gz\")]" } }
+        then {
+            assert process.failed
+            assert (process.stdout + process.stderr).join('\n').contains('re-compress it with bgzip')
+        }
+    }
+}

@@ -1,0 +1,17 @@
+nextflow_function {
+    name "Test applybqsrArgs"
+    script "modules/local/parabricks_applybqsr.nf"
+    function "applybqsrArgs"
+
+    test("never passes intervals") {
+        when { function { """
+            input[0] = 'input/x.cram'; input[1] = 'x.table'; input[2] = 'S.recal.bam'
+            input[3] = [cpus: 12, num_gpus: 1]
+        """ } }
+        then {
+            def a = function.result
+            assert a == '--in-bam input/x.cram --in-recal-file x.table --out-bam S.recal.bam --num-threads 12 --num-gpus 1'
+            assert !a.contains('--interval') && !a.contains('-L ')
+        }
+    }
+}

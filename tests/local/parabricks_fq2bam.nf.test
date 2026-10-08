@@ -1,0 +1,46 @@
+nextflow_process {
+    name "Test PARABRICKS_FQ2BAM (stub)"
+    script "modules/local/parabricks_fq2bam.nf"
+    process "PARABRICKS_FQ2BAM"
+    options "-stub"
+    config "tests/local/parabricks_fq2bam.nf.config"
+
+    test("stub emits CRAM, index, table and idxstats with known sites") {
+        when { process { """
+            def f = "\${projectDir}/tests/fixtures"
+            input[0] = [[sample: 'S1', patient: 'P1', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']],
+                        [file("\$f/fastq/S1_L1_R1.fastq.gz"), file("\$f/fastq/S1_L1_R2.fastq.gz")]]
+            input[1] = [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]
+            input[2] = file("\$f/genome/bwa")
+            input[3] = [[file("\$f/genome/known_sites.vcf.gz")], [file("\$f/genome/known_sites.vcf.gz.tbi")]]
+            input[4] = file("\$f/genome/intervals.bed")
+        """ } }
+        then {
+            assert process.success
+            assert file(process.out.cram[0][1]).name == 'S1.md.bam'
+            assert file(process.out.cram[0][2]).name == 'S1.md.bam.bai'
+            assert file(process.out.table[0][1]).name == 'S1.table'
+            assert file(process.out.idxstats[0][1]).name == 'S1.fq2bam.idxstats'
+        }
+    }
+
+    test("a CRAM intermediate emits S.md.cram and its .crai") {
+        when {
+            params { fq2bam_intermediate_fmt = 'cram' }
+            process { """
+            def f = "\${projectDir}/tests/fixtures"
+            input[0] = [[sample: 'S1', patient: 'P1', status: 0, single_end: false, read_groups: ['@RG\\\\tID:A']],
+                        [file("\$f/fastq/S1_L1_R1.fastq.gz"), file("\$f/fastq/S1_L1_R2.fastq.gz")]]
+            input[1] = [file("\$f/genome/reference.fasta"), file("\$f/genome/reference.fasta.fai")]
+            input[2] = file("\$f/genome/bwa")
+            input[3] = [[file("\$f/genome/known_sites.vcf.gz")], [file("\$f/genome/known_sites.vcf.gz.tbi")]]
+            input[4] = file("\$f/genome/intervals.bed")
+        """ }
+        }
+        then {
+            assert process.success
+            assert file(process.out.cram[0][1]).name == 'S1.md.cram'
+            assert file(process.out.cram[0][2]).name == 'S1.md.cram.crai'
+        }
+    }
+}

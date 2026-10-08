@@ -1,0 +1,2 @@
+sample,lane,fastq_1,fastq_2,alignment,alignment_index,recal_table
+S1,1,tests/fixtures/fastq/S1_L1_R1.fastq.gz,,x.bam,x.bam.bai,x.table

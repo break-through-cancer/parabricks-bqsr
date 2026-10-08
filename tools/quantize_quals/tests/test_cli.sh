@@ -42,7 +42,7 @@ expect_log() {
     local name="$1" file="$2" line="$3"
     if grep -qxF -- "$line" "$file"; then pass "$name"; else fail "$name"; echo "  missing: $line"; cat "$file"; fi
 }
-expect_log "log: version banner"   "$tmp/log.err" "quantize_quals 0.1.1 (htslib $(sed -n 's/.*(htslib \(.*\)).*/\1/p' <("$bin" --version)))"
+expect_log "log: version banner"   "$tmp/log.err" "quantize_quals 0.1.2 (htslib $(sed -n 's/.*(htslib \(.*\)).*/\1/p' <("$bin" --version)))"
 expect_log "log: input"            "$tmp/log.err" "quantize_quals: input: $fx/input.sam"
 expect_log "log: output"           "$tmp/log.err" "quantize_quals: output: $tmp/nearest.bam (BAM, indexed)"
 expect_log "log: mode"             "$tmp/log.err" "quantize_quals: mode: nearest bin in probability space; preserve Q<6; bins 10,20,30; threads 2"
@@ -117,6 +117,14 @@ grep -v '^@HD' "$fx/input.sam" > "$tmp/unsorted.sam"
     && pass "input without SO:coordinate is processed but not indexed, with a warning" \
     || fail "input without SO:coordinate is processed but not indexed, with a warning"
 
+cram_version() { head -c 6 "$1" | tail -c 2 | od -An -tu1 | tr -s ' ' | sed 's/^ //; s/ $//; s/ /./'; }
+run --in "$fx/input.sam" --out "$tmp/v_default.cram" --ref "$fx/ref.fa" --static-quantized-quals 10 20 30
+[[ "$(cram_version "$tmp/v_default.cram")" == "3.0" ]] && pass "CRAM output defaults to version 3.0" || fail "CRAM output defaults to version 3.0 (got $(cram_version "$tmp/v_default.cram"))"
+run --in "$fx/input.sam" --out "$tmp/v31.cram" --ref "$fx/ref.fa" --static-quantized-quals 10 20 30 --cram-version 3.1
+[[ "$(cram_version "$tmp/v31.cram")" == "3.1" ]] && pass "--cram-version 3.1 writes CRAM 3.1" || fail "--cram-version 3.1 writes CRAM 3.1 (got $(cram_version "$tmp/v31.cram"))"
+run --in "$fx/input.sam" --out "$tmp/v_bam.bam" --static-quantized-quals 10 20 30 --cram-version 3.1 \
+    && pass "--cram-version is accepted (and ignored) for BAM output" || fail "--cram-version is accepted (and ignored) for BAM output"
+
 expect_error "no --static-quantized-quals"  "--static-quantized-quals" --in "$fx/input.sam" --out "$tmp/x.bam"
 expect_error "flag with no values"          "--static-quantized-quals" --in "$fx/input.sam" --out "$tmp/x.bam" --static-quantized-quals --round-down-quantized
 expect_error "threshold not below min bin"  "strictly below"           --in "$fx/input.sam" --out "$tmp/x.bam" --static-quantized-quals 10 20 30 --preserve-qscores-less-than 10
@@ -129,6 +137,7 @@ expect_error "unknown output extension"     "extension"                --in "$fx
 expect_error "unknown option"               "unknown option"           --in "$fx/input.sam" --out "$tmp/x.bam" --static-quantized-quals 10 20 30 --quantize-quals 4
 expect_error "nonexistent input"            "cannot open"              --in "$tmp/nope.bam" --out "$tmp/x.bam" --static-quantized-quals 10 20 30
 expect_error "bad --threads"                "--threads"                --in "$fx/input.sam" --out "$tmp/x.bam" --static-quantized-quals 10 20 30 --threads 0
+expect_error "bad --cram-version"           "--cram-version"           --in "$fx/input.sam" --out "$tmp/x.cram" --ref "$fx/ref.fa" --static-quantized-quals 10 20 30 --cram-version 2.1
 expect_error "bad --progress-every"         "--progress-every"         --in "$fx/input.sam" --out "$tmp/x.bam" --static-quantized-quals 10 20 30 --progress-every -1
 
 if [[ $failures -gt 0 ]]; then

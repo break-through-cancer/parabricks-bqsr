@@ -1,0 +1,264 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/break-through-cancer/parabricks-fq2bam-bqsr/main/nextflow_schema.json",
+    "title": "parabricks-fq2bam-bqsr pipeline parameters",
+    "description": "Parabricks alignment and genome-wide BQSR with optional GATK-compatible static quality-score quantization",
+    "type": "object",
+    "$defs": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Samplesheet and output location.",
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "description": "Samplesheet CSV: FASTQ entry (fastq_1 column) or alignment + table entry (alignment column).",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "pattern": "^\\S+\\.csv$"
+                },
+                "outdir": {
+                    "type": "string",
+                    "description": "Output directory.",
+                    "default": "./results",
+                    "format": "directory-path"
+                }
+            }
+        },
+        "reference_genome_options": {
+            "title": "Reference genome options",
+            "type": "object",
+            "fa_icon": "fas fa-dna",
+            "description": "Built-in genome or explicit reference files; explicit parameters override genome defaults.",
+            "properties": {
+                "genome": {
+                    "type": "string",
+                    "description": "Built-in genome (GATK.GRCh38), or null for a custom genome.",
+                    "default": "GATK.GRCh38"
+                },
+                "igenomes_base": {
+                    "type": "string",
+                    "description": "Base path of built-in genome files.",
+                    "default": "s3://ngi-igenomes/igenomes/"
+                },
+                "ref_fasta": {
+                    "type": "string",
+                    "description": "Reference FASTA (overrides the genome default).",
+                    "format": "file-path"
+                },
+                "ref_fasta_fai": {
+                    "type": "string",
+                    "description": "FASTA index; defaults to <ref_fasta>.fai.",
+                    "format": "file-path"
+                },
+                "bwa_index": {
+                    "type": "string",
+                    "description": "Directory holding a classic BWA index of the FASTA.",
+                    "format": "directory-path"
+                },
+                "known_sites": {
+                    "type": "string",
+                    "description": "Comma-separated known-sites .vcf.gz files; none means BQSR is skipped."
+                },
+                "intervals": {
+                    "type": "string",
+                    "description": "Intervals restricting BQSR table building only.",
+                    "format": "file-path"
+                },
+                "no_intervals": {
+                    "type": "boolean",
+                    "description": "Build the BQSR table genome-wide, ignoring any genome default intervals.",
+                    "default": false
+                }
+            }
+        },
+        "read_options": {
+            "title": "Read options",
+            "type": "object",
+            "fa_icon": "fas fa-cut",
+            "description": "Read groups and fastp trimming.",
+            "properties": {
+                "seq_platform": {
+                    "type": "string",
+                    "description": "Read group PL.",
+                    "default": "ILLUMINA"
+                },
+                "trim_fastq": {
+                    "type": "boolean",
+                    "description": "Enable fastp trimming (fastp always runs for read counts and QC).",
+                    "default": false
+                },
+                "clip_r1": {
+                    "type": "integer",
+                    "description": "Bases removed from the 5' end of read 1.",
+                    "default": 0,
+                    "minimum": 0
+                },
+                "clip_r2": {
+                    "type": "integer",
+                    "description": "Bases removed from the 5' end of read 2.",
+                    "default": 0,
+                    "minimum": 0
+                },
+                "three_prime_clip_r1": {
+                    "type": "integer",
+                    "description": "Bases removed from the 3' end of read 1.",
+                    "default": 0,
+                    "minimum": 0
+                },
+                "three_prime_clip_r2": {
+                    "type": "integer",
+                    "description": "Bases removed from the 3' end of read 2.",
+                    "default": 0,
+                    "minimum": 0
+                },
+                "poly_g_trimming": {
+                    "type": "string",
+                    "enum": ["auto", "on", "off"],
+                    "default": "auto",
+                    "description": "Poly-G tail trimming by fastp, independent of --trim_fastq. auto: fastp detects two-colour instruments (NovaSeq, NextSeq) and trims there. Untrimmed poly-G tails changed about 10% of read alignments on NovaSeq data. off: fq2bam reads the original FASTQs."
+                },
+                "length_required": {
+                    "type": "integer",
+                    "description": "Minimum read length after trimming.",
+                    "default": 15,
+                    "minimum": 0
+                },
+                "save_trimmed": {
+                    "type": "boolean",
+                    "description": "Publish trimmed FASTQs.",
+                    "default": false
+                }
+            }
+        },
+        "alignment_options": {
+            "title": "Alignment options",
+            "type": "object",
+            "fa_icon": "fas fa-align-left",
+            "description": "Parabricks fq2bam settings.",
+            "properties": {
+                "markdups_se_mode": {
+                    "type": "string",
+                    "description": "Single-end duplicate marking: 5prime (standard) or start-end (adapter-trimmed short fragments).",
+                    "default": "5prime",
+                    "enum": [
+                        "5prime",
+                        "start-end"
+                    ]
+                },
+                "optical_duplicate_pixel_distance": {
+                    "type": "integer",
+                    "description": "Optical-duplicate metrics only; 2500 is usual for patterned flowcells.",
+                    "default": 100,
+                    "minimum": 0
+                },
+                "fq2bam_gpus": {
+                    "type": "integer",
+                    "description": "GPUs for fq2bam (CPUs and memory scale with it). Default 2: on a 21x WGS sample, 2 A10Gs cut fq2bam from 48.8 to 37.6 min for about 8% more cost; set 1 to minimise cost.",
+                    "default": 2,
+                    "minimum": 1,
+                    "maximum": 4
+                },
+                "fq2bam_low_memory": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Pass --low-memory to fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x WGS sample. Turn on if a smaller GPU runs out of memory."
+                },
+                "fq2bam_gpuwrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Pass --gpuwrite to fq2bam: compress the output on a GPU. With a single GPU it shares the device with BQSR."
+                },
+                "fq2bam_intermediate_fmt": {
+                    "type": "string",
+                    "default": "bam",
+                    "enum": ["cram", "bam"],
+                    "description": "Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr. Not published; final outputs follow --output_fmt. BAM was 9% cheaper per 21x sample with identical results."
+                },
+                "fq2bam_memory_gb": {
+                    "type": "integer",
+                    "minimum": 16,
+                    "maximum": 768,
+                    "description": "Override fq2bam's first-attempt host memory (GB); retries multiply it by the attempt number. Unset: 44 GB per GPU, at least 64. For deep samples (about 60x and up), e.g. 176 with 2 GPUs."
+                }
+            }
+        },
+        "output_and_quantization_options": {
+            "title": "Output and quantization options",
+            "type": "object",
+            "fa_icon": "fas fa-compress",
+            "description": "Final alignment format and GATK-compatible static quality-score quantization.",
+            "properties": {
+                "output_fmt": {
+                    "type": "string",
+                    "description": "Final alignment format.",
+                    "default": "cram",
+                    "enum": [
+                        "bam",
+                        "cram"
+                    ]
+                },
+                "cram_version": {
+                    "type": "string",
+                    "description": "CRAM version for CRAM output. 3.0 is readable by essentially all tools; 3.1 is smaller but older HTSlib builds (e.g. the mosdepth container) and htsjdk-based tools may not read it; mosdepth is skipped for 3.1.",
+                    "default": "3.0",
+                    "enum": [
+                        "3.0",
+                        "3.1"
+                    ]
+                },
+                "publish_raw_alignment": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also publish the pre-BQSR alignment (FASTQ entry, with known sites only) as an indexed file in --output_fmt (CRAM at --cram_version, or BAM), alongside the already-published BQSR table. Lets a later alignment-entry run apply BQSR -- with a different quantization choice, or none -- without repeating alignment. No effect without known sites, since the published .md file already is the pre-recalibration alignment. Off by default: as CRAM, it runs roughly 2-3x the size of the final quantized output, recurring in storage for as long as it's kept; as BAM, larger still."
+                },
+                "quantize_quals_enabled": {
+                    "type": "boolean",
+                    "description": "Quantize quality scores; false publishes unquantized output.",
+                    "default": true
+                },
+                "quantize_quals_container": {
+                    "type": "string",
+                    "description": "Quantizer container image.",
+                    "default": "ghcr.io/break-through-cancer/parabricks-fq2bam-bqsr:0.1.2"
+                },
+                "static_quantized_quals": {
+                    "type": "string",
+                    "description": "Comma-separated static quantization bins.",
+                    "default": "10,20,30",
+                    "pattern": "^\\s*\\d+(\\s*,\\s*\\d+)*\\s*$"
+                },
+                "preserve_qscores_less_than": {
+                    "type": "integer",
+                    "description": "Qualities below this value remain unchanged.",
+                    "default": 6,
+                    "minimum": 0,
+                    "maximum": 93
+                },
+                "round_down_quantized": {
+                    "type": "boolean",
+                    "description": "Round down to a bin instead of the nearest bin in probability space.",
+                    "default": false
+                }
+            }
+        }
+    },
+    "allOf": [
+        {
+            "$ref": "#/$defs/input_output_options"
+        },
+        {
+            "$ref": "#/$defs/reference_genome_options"
+        },
+        {
+            "$ref": "#/$defs/read_options"
+        },
+        {
+            "$ref": "#/$defs/alignment_options"
+        },
+        {
+            "$ref": "#/$defs/output_and_quantization_options"
+        }
+    ]
+}

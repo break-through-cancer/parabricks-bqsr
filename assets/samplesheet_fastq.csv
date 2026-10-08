@@ -1,0 +1,2 @@
+patient,sample,status,lane,fastq_1,fastq_2
+PATIENT_ID,SAMPLE_ID,0,1,/path/to/SAMPLE_ID_L001_R1.fastq.gz,/path/to/SAMPLE_ID_L001_R2.fastq.gz

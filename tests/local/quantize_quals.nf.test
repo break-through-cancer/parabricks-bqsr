@@ -7,7 +7,7 @@ nextflow_process {
         when {
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -19,7 +19,7 @@ nextflow_process {
         then {
             assert process.success
             def (meta, bam_out, idx) = process.out[0][0]
-            assert meta == [ sample: 'TEST_SAMPLE' ]
+            assert meta == [ sample: 'TEST_SAMPLE', suffix: 'recal' ]
             assert file(bam_out).name == 'TEST_SAMPLE.recal.bam'
             assert file(idx).name == 'TEST_SAMPLE.recal.bam.bai'
             assert bam(bam_out).getSamLines()*.trim() ==
@@ -35,7 +35,7 @@ nextflow_process {
             }
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.cram") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.cram") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -48,6 +48,7 @@ nextflow_process {
             assert process.success
             def (meta, cram_out, idx) = process.out[0][0]
             assert file(cram_out).name == 'TEST_SAMPLE.recal.cram'
+            assert file(cram_out).bytes[4] == 3 && file(cram_out).bytes[5] == 0
             assert file(idx).name == 'TEST_SAMPLE.recal.cram.crai'
             def core = { List lines -> lines.collect { it.trim().tokenize('\t').take(11).join('\t') }.sort() }
             assert core(cram(cram_out, "${projectDir}/tests/fixtures/modules/reference.fasta").getSamLines()) ==
@@ -59,7 +60,7 @@ nextflow_process {
         when {
             process {
                 """
-                input[0] = [ [ sample: 'collide' ], file("\${projectDir}/tests/fixtures/modules/collide.recal.bam") ]
+                input[0] = [ [ sample: 'collide', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/collide.recal.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -81,7 +82,7 @@ nextflow_process {
             }
             process {
                 """
-                input[0] = [ [ sample: 'TEST_SAMPLE' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
+                input[0] = [ [ sample: 'TEST_SAMPLE', suffix: 'recal' ], file("\${projectDir}/tests/fixtures/modules/sample.bam") ]
                 input[1] = [
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
                     file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
@@ -93,6 +94,59 @@ nextflow_process {
         then {
             assert process.failed
             assert (process.stdout + process.stderr).join('\n').contains('strictly below')
+        }
+    }
+
+    test("md suffix names the output .md and writes a MultiQC summary row") {
+        when { process { """
+            input[0] = [[sample: 'TEST_SAMPLE', suffix: 'md'], file("\${projectDir}/tests/fixtures/modules/sample.bam")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+            input[2] = 'bam'
+        """ } }
+        then {
+            assert process.success
+            assert file(process.out.alignment[0][1]).name == 'TEST_SAMPLE.md.bam'
+            def tsv = file(process.out.mqc[0]).text
+            assert tsv.contains('TEST_SAMPLE\t11\t365\t299\t81.9')
+        }
+    }
+
+    test("a before/after quality-distribution histogram is emitted for MultiQC") {
+        when { process { """
+            input[0] = [[sample: 'TEST_SAMPLE', suffix: 'recal'], file("\${projectDir}/tests/fixtures/modules/sample.bam")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+            input[2] = 'bam'
+        """ } }
+        then {
+            assert process.success
+            def lines = file(process.out.hist[0]).readLines()
+            assert lines[0] == "# id: 'quantize_quals_hist'"
+            assert lines[2] == "# plot_type: 'bargraph'"
+            assert lines.contains('Category\tbefore\tafter')
+            // Every input quality bin is preserved as its own row; quantized bins gain the collapsed mass.
+            assert lines.contains('Q0\t0.5\t0.5')
+            assert lines.contains('Q6\t2.5\t3.8')
+            assert lines.contains('Q10\t1.9\t12.1')
+            assert lines.contains('Q20\t2.7\t22.7')
+            assert lines.contains('Q30\t1.6\t52.1')
+            // A bin that only exists pre-quantization gets 0 on the "after" side, not dropped.
+            assert lines.contains('Q93\t0.3\t0')
+        }
+    }
+
+    test("cram_version 3.1 writes CRAM 3.1") {
+        when {
+            params { cram_version = '3.1' }
+            process { """
+                input[0] = [[sample: 'TEST_SAMPLE', suffix: 'recal'], file("\${projectDir}/tests/fixtures/modules/sample.bam")]
+            input[1] = [file("\${projectDir}/tests/fixtures/modules/reference.fasta"), file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")]
+                input[2] = 'cram'
+            """ }
+        }
+        then {
+            assert process.success
+            def out = process.out.alignment[0][1]
+            assert file(out).bytes[4] == 3 && file(out).bytes[5] == 1
         }
     }
 }

@@ -1,6 +1,12 @@
 import pytest
 
-from preprocess import build_samplesheet
+import importlib.util
+import pathlib
+
+_spec = importlib.util.spec_from_file_location("alignment_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
+_preprocess = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_preprocess)
+build_samplesheet = _preprocess.build_samplesheet
 
 ROOT = "s3://bucket/datasets/ds1/data/preprocessing"
 

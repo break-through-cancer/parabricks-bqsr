@@ -1,0 +1,49 @@
+nextflow_workflow {
+    name "Test SAMPLESHEET_TO_FASTQS"
+    script "subworkflows/local/samplesheet_to_fastqs/main.nf"
+    workflow "SAMPLESHEET_TO_FASTQS"
+
+    test("paired multi-lane and single-end rows produce sarek-style read groups") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/valid.csv\"" } }
+        then {
+            assert workflow.success
+            def lanes = workflow.out.lanes.collectEntries { [(it[0].id): it] }
+            assert lanes.keySet() == ['S1_1', 'S1_2', 'S2_1'] as Set
+            def s1 = lanes.S1_1[0]
+            assert s1.read_group == '@RG\\tID:HFLOWCLXX.S1.1\\tPU:HFLOWCLXX.S1.1\\tSM:P1_S1\\tLB:S1\\tPL:ILLUMINA'
+            assert !s1.single_end && s1.n_lanes == 2 && s1.status == 0
+            assert lanes.S1_1[1].size() == 2
+            assert lanes.S2_1[0].single_end && lanes.S2_1[0].status == 1 && lanes.S2_1[1].size() == 1
+        }
+    }
+    test("patient and status default; non-Illumina header gives an unknown flowcell") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/defaults.csv\"" } }
+        then {
+            assert workflow.success
+            def meta = workflow.out.lanes[0][0]
+            assert meta.patient == 'S3' && meta.status == 0
+            assert meta.read_group.startsWith('@RG\\tID:unknown.S3.1\\t')
+        }
+    }
+    test("a sample may mix paired lanes and a single-end (singleton) lane") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/mixed_pe_se.csv\"" } }
+        then {
+            assert workflow.success
+            def lanes = workflow.out.lanes.collect { it[0] }
+            assert lanes*.single_end.sort() == [false, true] && lanes.every { it.n_lanes == 2 }
+        }
+    }
+
+    test("duplicate sample and lane is rejected") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/duplicate_lane.csv\"" } }
+        then { assert workflow.failed; assert workflow.stdout.join('\n').contains("Sample 'S1' has lane '1' more than once") }
+    }
+    test("one sample under two patients is rejected") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/two_patients.csv\"" } }
+        then { assert workflow.failed; assert workflow.stdout.join('\n').contains("Sample 'S1' has more than one patient") }
+    }
+    test("a missing FASTQ path is rejected naming it") {
+        when { workflow { "input[0] = \"\${projectDir}/tests/fixtures/fastq/missing_fastq.csv\"" } }
+        then { assert workflow.failed; assert (workflow.stdout + workflow.stderr).join('\n').contains('does_not_exist.fastq.gz') }
+    }
+}

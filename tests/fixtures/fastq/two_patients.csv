@@ -1,0 +1,3 @@
+patient,sample,status,lane,fastq_1,fastq_2
+P1,S1,0,1,tests/fixtures/fastq/S1_L1_R1.fastq.gz,tests/fixtures/fastq/S1_L1_R2.fastq.gz
+P9,S1,0,2,tests/fixtures/fastq/S1_L2_R1.fastq.gz,tests/fixtures/fastq/S1_L2_R2.fastq.gz
