@@ -3,7 +3,7 @@ import pytest
 import importlib.util
 import pathlib
 
-_spec = importlib.util.spec_from_file_location("alignment_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
+_spec = importlib.util.spec_from_file_location("apply_bqsr_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
 _preprocess = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_preprocess)
 build_samplesheet = _preprocess.build_samplesheet

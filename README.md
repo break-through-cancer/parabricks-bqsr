@@ -281,8 +281,8 @@ Two process registrations come from this repository:
 
 | Directory | Entry point | Input dataset |
 | --- | --- | --- |
-| `.cirro/fastq/` | FASTQ | Paired or single-end FASTQ datasets |
-| `.cirro/alignment/` | alignment + table | A `sarek_align` dataset with `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}` (Parabricks aligner, known sites, `save_mapped` on, `baserecalibrator` skipped) |
+| `.cirro/align/` | FASTQ | Paired or single-end FASTQ datasets |
+| `.cirro/apply_bqsr/` | alignment + table | A `sarek_align` dataset with `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}` (Parabricks aligner, known sites, `save_mapped` on, `baserecalibrator` skipped) |
 
 Each directory holds `process-form.json`, `process-input.json`, `preprocess.py`,
 `process-compute.config` and `process-output.json`. Both Parabricks processes run on the
@@ -291,18 +291,20 @@ on-demand GPU queue (`PW_ONDEMAND_JOB_QUEUE`) with retries on resource-related e
 **FASTQ form:** genome source (iGenomes GATK.GRCh38 with intervals set to GATK calling regions, none, or a custom BED such as WES targets, or a
 custom genome: a BWA index dataset containing `genome.fasta`, optional known-sites VCFs
 from the references library under `germline_resource`, optional BED under `genome_bed`),
-output format, quantization, trimming, single-end duplicate marking, optical pixel
-distance, alignment GPUs, low-memory mode and an fq2bam memory override. Read pairs come from Cirro's own pairing (`sampleIndex`). A
+output format, `apply_bqsr` (hides quantization when off), quantization, trimming,
+single-end duplicate marking, optical pixel distance, alignment GPUs, low-memory mode and an
+fq2bam memory override. Read pairs come from Cirro's own pairing (`sampleIndex`). A
 `fastq_singleton` column in the dataset's samplesheet adds that file to the sample as a
 single-end lane. Cirro ingest moves that column into the file list's `singleton` column and
 does not list the file itself (no read number, so no `paired_dnaseq` name pattern matches);
 the file is resolved next to the sample's read 1.
 
 **Registration settings:** repository `break-through-cancer/parabricks-fq2bam-bqsr`, entry
-script `main.nf`, configuration directory `.cirro/fastq` or `.cirro/alignment`, Nextflow
-`26.04.0` or later (required; nf-schema 2.8.0 needs it). A registration created
-before `.cirro/alignment/` existed must be re-pointed to that directory. Output file
-mapping can reuse `sarek_align`'s patterns:
+script `main.nf`, configuration directory `.cirro/align` or `.cirro/apply_bqsr`, Nextflow
+`26.04.0` or later (required; nf-schema 2.8.0 needs it). These directories are named for what
+each process does (align reads, or apply a BQSR table), not what it receives; a registration
+pointed at an earlier directory name (`.cirro/fastq`, `.cirro/alignment`) must be re-pointed
+after such a rename. Output file mapping can reuse `sarek_align`'s patterns:
 - `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`
 - `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam\.bai|cram\.crai)$`
 
