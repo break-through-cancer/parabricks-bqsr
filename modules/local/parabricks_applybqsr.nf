@@ -20,9 +20,7 @@ process PARABRICKS_APPLYBQSR {
     def expected_index = "${alignment}.${alignment.name.endsWith('.cram') ? 'crai' : 'bai'}"
     def args = applybqsrArgs(alignment, recal_table, "${meta.sample}.recal.bam",
         [cpus: task.cpus, num_gpus: task.accelerator ? task.accelerator.request : 1])
-    // Indexed here, in the same task that already has the file local, only when nothing else
-    // will touch it afterward (BAM output, no quantization): avoids a separate SAMTOOLS_FINALIZE
-    // task re-staging and re-indexing a potentially large file for no real transformation.
+    // Skips a separate SAMTOOLS_FINALIZE task when nothing else needs this file.
     def index_here = params.output_fmt == 'bam' && params.quantize_quals_enabled.toString() != 'true'
     """
     set -euo pipefail

@@ -5,6 +5,8 @@ Parabricks. Starting from FASTQs (the main entry point) or from an existing alig
 its BQSR table, it applies BQSR genome-wide with `pbrun applybqsr` (never restricted to
 intervals, so unmapped and off-target reads are recalibrated too) and can replicate GATK
 `ApplyBQSR`'s static quality-score quantization, a step Parabricks does not provide.
+Measured on a 105x WGS sample: 7.2h / $6.99, against 3d15h / $115.80 for sarek/CPU on the
+same sample.
 
 ```
 FASTQ samplesheet                          alignment + table samplesheet
@@ -126,23 +128,16 @@ BQSR table, writing), and that peak grows with depth, not with `--fq2bam_gpus` o
 `--fq2bam_memory_gb` (on Cirro: *fq2bam memory override*) so the first attempt succeeds
 instead of paying for one that doesn't.
 
-| Depth (WGS) | GPUs | Low-memory | `--fq2bam_memory_gb` | Basis |
-|---|---|---|---|---|
-| Low-pass (≤5x) | 1 | off | unset (64 GB) | Lowest cost. Not measured below 21x; memory is well below the 21x peak. |
-| About 20–30x | 2 (default) | off | unset (88 GB) | Measured at 21x: `fq2bam` 37.6 min, $0.77, peak 77 GB of 88. With 1 GPU: 48.8 min, $0.72. Near 30x the peak may pass 88 GB; the retry then uses 176 GB. |
-| About 60x | 2 | off | 176 (estimate) | Not measured; interpolated between the 21x and 105x peaks. |
-| About 100x and deeper | 4 | off | 352 | Measured at 105x: 1 GPU/64 GB and 2 GPU/88 GB were each killed in the duplicate-marking/BQSR/write phase (GATK MarkDuplicates alone peaks at 186 GB on the same sample, for comparison). 2 GPU/176 GB was also killed, auto-retried at 352 GB (peak ~349 GiB), and succeeded. Starting directly at 4 GPUs/352 GB succeeded on the first attempt: `fq2bam` 88.9 min (align 50 min, sort 5.6 min, dedup+table+write 32 min), full pipeline 7.2 h wall, $6.99 total — against $115.80 and 3 days 15 h for sarek/CPU on the same sample. |
+| Depth (WGS) | GPUs | Low-memory | `--fq2bam_memory_gb` |
+|---|---|---|---|
+| Low-pass (≤5x) | 1 | off | unset (64 GB) |
+| About 20–30x | 2 (default) | off | unset (88 GB) |
+| About 60x | 2 | off | 176 (estimate) |
+| About 100x and deeper | 4 | off | 352 |
 
 Placement on g5: a g5.12xlarge has 4 GPUs, 48 vCPUs and 192 GB, and holds two default
-2-GPU jobs. Above about 92 GB, one 2-GPU job fills a g5.12xlarge or half a g5.24xlarge, so
-its hourly cost rises (about +43% per job on a g5.24xlarge). A 352 GB job needs a whole
-g5.24xlarge regardless of GPU count, so 4 GPUs is the better choice at that memory tier:
-same cost, faster alignment.
-
-Other measured results (21x, 2 GPUs): the BAM intermediate (`--fq2bam_intermediate_fmt`,
-default) cost 9% less than CRAM with identical tables and read counts, mostly from a faster
-`applybqsr`; `--gpuwrite` made no difference; the CPU-mode sort that Parabricks uses when
-duplicate metrics are requested took about 40–65 s.
+2-GPU jobs. A 352 GB job needs a whole g5.24xlarge regardless of GPU count, so 4 GPUs is
+the better choice at that memory tier: same cost, faster alignment.
 
 ### Parameters
 
@@ -162,15 +157,15 @@ duplicate metrics are requested took about 40–65 s.
 | `--save_trimmed` | `false` | Publish trimmed FASTQs. |
 | `--markdups_se_mode` | `5prime` | Single-end duplicate marking: `5prime` (standard) or `start-end` (adapter-trimmed short fragments such as cfDNA). |
 | `--optical_duplicate_pixel_distance` | `100` | Optical-duplicate metrics only; 2500 is usual for patterned flowcells. |
-| `--fq2bam_gpus` | `2` | GPUs for alignment, 1–4 (2 is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; set 1 to minimise cost). CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB (1 GPU: 16/64; 2: 24/88, two jobs fit a g5.12xlarge; 4: 48/176). |
-| `--fq2bam_low_memory` | `false` | `--low-memory` for fq2bam (one BWA stream per GPU). Off by default: on an A10G 24 GB, Parabricks' auto mode fits without it and BWA ran 27% faster on a 21x sample. Turn on if a smaller GPU runs out of memory. |
-| `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Turning it off made no measurable difference on one GPU; not shown on the Cirro form. |
-| `--fq2bam_intermediate_fmt` | `bam` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `bam` or `cram`. Not published; final outputs follow `--output_fmt`. BAM was 9% cheaper on a 21x sample with identical results (applybqsr 41% faster). Not shown on the Cirro form. |
+| `--fq2bam_gpus` | `2` | GPUs for alignment, 1–4; set 1 to minimise cost, more for speed. CPUs and memory scale with it: 12 CPUs and 44 GB per GPU, at least 16 CPUs / 64 GB. |
+| `--fq2bam_low_memory` | `false` | `--low-memory` for fq2bam (one BWA stream per GPU). Turn on if a smaller GPU runs out of memory. |
+| `--fq2bam_gpuwrite` | `true` | `--gpuwrite` for fq2bam. Not shown on the Cirro form. |
+| `--fq2bam_intermediate_fmt` | `bam` | Format of the duplicate-marked alignment passed from fq2bam (or markdup) to applybqsr: `bam` or `cram`. Not published; final outputs follow `--output_fmt`. Not shown on the Cirro form. |
 | `--fq2bam_memory_gb` | unset | Override `fq2bam`'s first-attempt host memory in GB (16–768); retries multiply it by the attempt number and `--memory-limit` stays at half. Unset: 44 GB per GPU, at least 64. See *Settings by sequencing depth*. |
-| `--apply_bqsr` | `true` | FASTQ entry with known sites: run `applybqsr` (and quantization) in this same run. `false` aligns only, publishing the markduplicates alignment and BQSR table as this run's output — quantization does not run, regardless of `--quantize_quals_enabled` — to apply BQSR later with a separate alignment-entry run against them, choosing quantization then. No effect without known sites, or on the alignment entry (which always applies BQSR). |
+| `--apply_bqsr` | `true` | FASTQ entry with known sites: run `applybqsr` (and quantization) in this same run. `false` aligns only, publishing the markduplicates alignment and BQSR table as this run's output, to apply BQSR later with a separate alignment-entry run against them. No effect without known sites, or on the alignment entry (which always applies BQSR). |
 | `--output_fmt` | `cram` | `bam` or `cram`. |
 | `--cram_version` | `3.0` | CRAM version for CRAM output. `3.0` is readable by essentially all tools; `3.1` is smaller, but older HTSlib builds and htsjdk-based tools may not read it, and mosdepth coverage QC is skipped. |
-| `--publish_markduplicates` | `false` | FASTQ entry with known sites only: also publish the pre-BQSR, duplicate-marked alignment as an indexed file in `--output_fmt` (`preprocessing/markduplicates/<s>/<s>.md.cram` or `.md.bam`), alongside the BQSR table that's already published there. Lets a later alignment-entry run apply BQSR — with a different quantization choice, or none — without repeating alignment. No effect without known sites (the published `.md` file already is this alignment). Off by default: measured on real data, the CRAM form runs about 2.4x the size of the final quantized CRAM (quantization alone, independent of CRAM's own compression, cut file size by more than half here) — on a 105x sample (77.6 GB final CRAM) that's roughly 185 GB extra, recurring for as long as it's kept; BAM is larger still. Weigh that against the cost of the alignment it saves re-running (105x `fq2bam`: $4.97, 89 min). |
+| `--publish_markduplicates` | `false` | FASTQ entry with known sites only: also publish the pre-BQSR, duplicate-marked alignment as an indexed file in `--output_fmt`, alongside the BQSR table that's already published there. Lets a later alignment-entry run apply BQSR without repeating alignment. No effect without known sites. |
 | `--quantize_quals_enabled` | `true` | Quantize quality scores; `false` publishes unquantized output. |
 | `--static_quantized_quals` | `10,20,30` | Comma-separated static bins. |
 | `--preserve_qscores_less_than` | `6` | Qualities below this value remain unchanged. |
@@ -183,20 +178,15 @@ added to both `nextflow.config` and the schema; `tests/config` checks they match
 
 Quality filtering in fastp is always disabled: GATK discourages quality trimming, as base
 qualities are handled by soft-clipping, BQSR and the variant callers. Poly-G tails are
-different. On two-colour instruments "no signal" is called as a G, often with good quality,
-so reads that run past a short fragment end in G runs that alignment does not clip. On a
-NovaSeq WGS sample (1M read pairs), untrimmed poly-G tails changed about 10% of read
-alignments against the same reads after trimming. They accounted for 99.7% of the extra
-supplementary alignments and 98.8% of the proper-pair changes, and raised duplicates from
-7.6% to 9.4%. With poly-G trimming, Parabricks matched nf-core/sarek's BWA-MEM: identical
-proper-pair, duplicate and MAPQ-0 rates; the only position differences were MAPQ-0 reads.
-`--length_required` is the only filter that removes reads (pairs emptied by trimming), and
-the read checks count fastp's output whenever fq2bam aligns it.
+different: on two-colour instruments "no signal" is called as a high-quality G, producing
+tails that alignment does not clip and that materially affect mapping and duplicate rates
+untrimmed (see `--poly_g_trimming`). `--length_required` is the only filter that removes
+reads (pairs emptied by trimming), and the read checks count fastp's output whenever fq2bam
+aligns it.
 
 When fq2bam aligns fastp's output, it waits for fastp to finish (a CPU task; no GPU is
 held meanwhile). fastp runs with 16 threads, the most fastp 0.24 uses, and fast output
-compression (`-z 1`). For reference, nf-core/sarek's fastp (12 threads) took 45 min on a
-105x WGS sample.
+compression (`-z 1`).
 
 ### Outputs
 
@@ -214,28 +204,18 @@ pipeline_info/
 The layout matches nf-core/sarek, so sarek-based variant calling (including Cirro's
 `sarek_call_variants`) recognises the outputs. The intermediate `applybqsr` BAM is never
 published. With `--apply_bqsr false` (known sites, FASTQ entry), the `fq2bam`/`markdup`
-alignment and BQSR table *are* this run's output — align now, apply BQSR later with a
-separate alignment-entry run against them, choosing quantization then. With `--apply_bqsr`
-at its default `true`, that alignment is published only via `--publish_markduplicates` (see
-*Parameters*); otherwise it's discarded once BQSR has run.
+alignment and BQSR table *are* this run's output; otherwise that alignment is published only
+via `--publish_markduplicates`, or discarded once BQSR has run.
 
-When the alignment that would be published is already in `--output_fmt` with no quantization
-pending, the step that produced it (`fq2bam`/`markdup`, or `applybqsr`) indexes it in place and
-publishes it directly, instead of a separate finalize task re-staging and re-indexing a
-potentially large file for no real transformation. `SAMTOOLS_FINALIZE` then does not appear in
-that run's task list at all; this is expected, not an error.
+When the alignment to publish is already in `--output_fmt` with no quantization pending, the
+step that produced it indexes and publishes it directly; `SAMTOOLS_FINALIZE` then does not
+appear in that run's task list at all. This is expected, not an error.
 
-`reports/samtools/<s>/<s>.stats` (full `samtools stats`, error rate/insert size/GC bias/etc.)
-reads the pre-quantization alignment, not the published file: BQSR and quantization only
-rewrite quality bytes, never alignment or mismatches, so every field it reports is identical
-either way except quality-value histograms, which `reports/quantize/<s>/` covers instead (see
-below). Reading the pre-quantization BAM avoids CRAM-decode overhead on `stats`' mostly
-single-threaded accumulation loop. `<s>.flagstat` (`samtools flagstat`) always reads the true
-published file, cheaply, and is what the read-count check below relies on.
-
-The MultiQC report also plots the quality-score distribution before and after quantization
-(`reports/quantize/<s>/` log; the two percentage-by-bin lines `quantize_quals` already computes
-are parsed into a before/after line graph, not just the summary row).
+`reports/samtools/<s>/<s>.stats` reads the pre-quantization alignment rather than the
+published file (BQSR and quantization only rewrite quality bytes), while `<s>.flagstat`
+reads the true published file and backs the read-count check below. MultiQC also plots the
+quality-score distribution before and after quantization, from the `reports/quantize/<s>/`
+log.
 
 ### Read-count checks
 
@@ -282,48 +262,32 @@ Two process registrations come from this repository:
 | Directory | Entry point | Input dataset |
 | --- | --- | --- |
 | `.cirro/align/` | FASTQ | Paired or single-end FASTQ datasets |
-| `.cirro/apply_bqsr/` | alignment + table | A `sarek_align` dataset with `preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}` (Parabricks aligner, known sites, `save_mapped` on, `baserecalibrator` skipped) |
+| `.cirro/apply_bqsr/` | alignment + table | A `sarek_align` dataset (`preprocessing/parabricks/<sample>/<sample>.{bam,bam.bai,table}`), or this pipeline's own `--apply_bqsr false` output (`preprocessing/markduplicates/` + `preprocessing/recal_table/`) |
 
 Each directory holds `process-form.json`, `process-input.json`, `preprocess.py`,
 `process-compute.config` and `process-output.json`. Both Parabricks processes run on the
 on-demand GPU queue (`PW_ONDEMAND_JOB_QUEUE`) with retries on resource-related exit codes.
 
-**FASTQ form:** genome source (iGenomes GATK.GRCh38 with intervals set to GATK calling regions, none, or a custom BED such as WES targets, or a
-custom genome: a BWA index dataset containing `genome.fasta`, optional known-sites VCFs
-from the references library under `germline_resource`, optional BED under `genome_bed`),
-output format, `apply_bqsr` (hides quantization when off), quantization, trimming,
-single-end duplicate marking, optical pixel distance, alignment GPUs, low-memory mode and an
-fq2bam memory override. Read pairs come from Cirro's own pairing (`sampleIndex`). A
+**FASTQ form:** genome source (iGenomes GATK.GRCh38, or a custom genome via a BWA index
+dataset plus known-sites/intervals from the references library), output format, `apply_bqsr`
+(hides quantization when off), quantization, trimming, single-end duplicate marking, optical
+pixel distance, alignment GPUs, low-memory mode and an fq2bam memory override. A
 `fastq_singleton` column in the dataset's samplesheet adds that file to the sample as a
-single-end lane. Cirro ingest moves that column into the file list's `singleton` column and
-does not list the file itself (no read number, so no `paired_dnaseq` name pattern matches);
-the file is resolved next to the sample's read 1.
+single-end lane, resolved next to the sample's read 1.
 
 **Registration settings:** repository `break-through-cancer/parabricks-fq2bam-bqsr`, entry
 script `main.nf`, configuration directory `.cirro/align` or `.cirro/apply_bqsr`, Nextflow
-`26.04.0` or later (required; nf-schema 2.8.0 needs it). These directories are named for what
-each process does (align reads, or apply a BQSR table), not what it receives; a registration
-pointed at an earlier directory name (`.cirro/fastq`, `.cirro/alignment`) must be re-pointed
-after such a rename. Output file mapping can reuse `sarek_align`'s patterns:
-- `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam|cram)$`
-- `preprocessing/(?P<bamType>recalibrated|markduplicates)/(?P<sampleName>[^/]+)/[^/]+\.(?:bam\.bai|cram\.crai)$`
+`26.04.0` or later. The align process needs `file_mapping_rules` so its output dataset's
+files are discoverable by a later apply_bqsr run — Cirro's engine uses .NET-style named
+groups (`(?<sample>...)`, not Python's `(?P<sample>...)`), and `is_sample: true` is what
+makes a rule's captured group populate per-file sample metadata:
+- Aligned reads (`is_sample: true`): `preprocessing/(?<bamType>recalibrated|markduplicates)/(?<sample>[^/]+)/[^/]+\.(?:bam|cram)$` and the matching `.bam.bai|.cram.crai` pattern
+- BQSR table (`is_sample: true`): `preprocessing/recal_table/(?<sample>[^/]+)/[^/]+\.table$`
 
 ## Known gaps
 
-1. **The FASTQ entry point has not run on a GPU.** Validation on Cirro, in order:
-   - V1: a low-pass human sample from FASTQ (read checks, `fq2bam` writing `.crai`, QC
-     directory contents, `--memory-limit`, resource sizing).
-   - V2: a single-lane sample compared with `sarek_align` on the same FASTQs (read groups,
-     mapping and duplicate rates, identical table, matching pre-BQSR records).
-   - V3: a single-end sample with both duplicate-marking modes.
-   - V4: paired + singleton samples (`fq2bam` rejects `--in-fq` with `--in-se-fq` in one
-     call, so these go through the split path: read counts, `markdup` output sort order,
-     `bqsr` and `collectmultiplemetrics` on CRAM).
-   - V5: a canine custom genome with and without known sites.
-   - V6: low-pass tables (observations per read group below 1x).
-   - V7: quantization parity with GATK `ApplyBQSR --static-quantized-quals`.
-2. **`stageInMode 'copy'`** is inherited from the nf-core Parabricks modules;
+1. **`stageInMode 'copy'`** is inherited from the nf-core Parabricks modules;
    `--preserve-file-symlinks` may make the copy unnecessary.
-3. **`SAMTOOLS_FINALIZE` exists because `applybqsr` writes BAM only** (NVIDIA documents
+2. **`SAMTOOLS_FINALIZE` exists because `applybqsr` writes BAM only** (NVIDIA documents
    its `--out-bam` as "Output BAM file"). With quantization on, `QUANTIZE_QUALS` writes
    CRAM directly and this step does not run.

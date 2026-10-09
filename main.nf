@@ -30,11 +30,7 @@ workflow {
 
     ref_ch = Channel.value([file(refs.ref_fasta, checkIfExists: true), file(refs.ref_fasta_fai, checkIfExists: true)])
     def quantize = params.quantize_quals_enabled.toString() == 'true'
-    // Whenever applybqsr runs and nothing will quantize its output, applybqsr indexes its own
-    // BAM directly (see PARABRICKS_APPLYBQSR) and publishes it itself -- skipping a separate
-    // SAMTOOLS_FINALIZE task that would otherwise re-stage and re-index a potentially large file
-    // for no real transformation. Pure --output_fmt/--quantize_quals_enabled check: wherever
-    // applybqsr runs, quantize already equals quantize_quals_enabled exactly (see below).
+    // Skips SAMTOOLS_FINALIZE when applybqsr's own BAM output already needs no change.
     def applybqsr_direct = params.output_fmt == 'bam' && !quantize
     def use_direct_final = false
     def direct_final = channel.empty()
@@ -42,9 +38,7 @@ workflow {
     if (entry == 'fastq') {
         def bqsr = refs.known_sites as boolean
         def apply_bqsr = bqsr && params.apply_bqsr.toString() != 'false'
-        // Known sites, BQSR deferred: fq2bam/markdup's own alignment+index is the run's output,
-        // so if it is already in --output_fmt, publish it directly instead of launching
-        // SAMTOOLS_FINALIZE only to re-stage and re-index a file that needs neither.
+        // Skips SAMTOOLS_FINALIZE when fq2bam/markdup's own output already needs no change.
         def md_direct = !apply_bqsr && params.fq2bam_intermediate_fmt == params.output_fmt
         log.info intervalsMessage(refs)
         if (!bqsr) log.warn "No known sites supplied: BQSR is skipped; outputs are published as .md files under preprocessing/markduplicates/"
@@ -90,11 +84,7 @@ workflow {
         aligned_cram = PARABRICKS_FQ2BAM.out.cram.mix(PARABRICKS_MARKDUP.out.cram)
         aligned_table = PARABRICKS_FQ2BAM.out.table.mix(PARABRICKS_MARKDUP.out.table)
 
-        // With known sites, the pre-recalibration alignment is otherwise never published (only
-        // the table is, unconditionally, by PARABRICKS_FQ2BAM/MARKDUP's own publishDir) -- an
-        // alignment-entry run can later apply BQSR against it, with any quantization choice,
-        // without repeating alignment. No effect without known sites: the published .md file
-        // already is this alignment. Follows --output_fmt, same as the final output.
+        // The pre-recalibration alignment is otherwise discarded once BQSR runs.
         if (apply_bqsr && params.publish_markduplicates.toString() == 'true') {
             SAMTOOLS_FINALIZE_RAW(
                 aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] },
@@ -121,10 +111,7 @@ workflow {
                 direct_final = aligned_cram.map { meta, cram, crai -> [[sample: meta.sample, suffix: 'md'], cram, crai] }
             }
         }
-        // Known sites but apply_bqsr=false: BQSR is deliberately deferred to a later
-        // alignment-entry run, so quantization (a choice that belongs with it) is too --
-        // regardless of --quantize_quals_enabled. Without known sites there is no later run
-        // to defer to, so quantization applies now as usual.
+        // Quantization is deferred along with BQSR when apply_bqsr=false.
         quantize = quantize && (apply_bqsr || !bqsr)
         before_idxstats = PARABRICKS_FQ2BAM.out.idxstats.mix(PARABRICKS_MARKDUP.out.idxstats)
             .map { meta, idx -> [[sample: meta.sample], idx] }
@@ -149,8 +136,6 @@ workflow {
         final_ch = QUANTIZE_QUALS.out.alignment
         quant_mqc = QUANTIZE_QUALS.out.mqc.mix(QUANTIZE_QUALS.out.hist)
     } else if (use_direct_final) {
-        // Already in --output_fmt with a valid index from the process that made it --
-        // nothing left to do; avoids staging a potentially large file through an extra task.
         final_ch = direct_final
         quant_mqc = channel.empty()
     } else {
@@ -159,12 +144,8 @@ workflow {
         quant_mqc = Channel.empty()
     }
 
-    // Detailed stats read the pre-quantization alignment (always BAM here): everything it
-    // reports except quality-value histograms is unaffected by BQSR/quantization, and this
-    // avoids CRAM decode for samtools stats' mostly-single-threaded accumulation. flagstat
-    // instead reads the true published file, genome-wide/fastq-read-count integrity (read
-    // checks) and the mosdepth/CRAM-validity canary below both need to see what's actually
-    // delivered, not an earlier intermediate.
+    // stats reads the pre-quantization alignment (unaffected by BQSR/quantization except
+    // quality bytes); flagstat and mosdepth read the true published file.
     SAMTOOLS_STATS(to_finish, ref_ch)
     SAMTOOLS_FLAGSTAT(final_ch.map { meta, aln, _idx -> [meta, aln] }, ref_ch)
     if (params.output_fmt == 'cram' && params.cram_version == '3.1') {
