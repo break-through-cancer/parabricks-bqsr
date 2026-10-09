@@ -22,15 +22,15 @@ nextflow_pipeline {
             assert ok.count { it.startsWith('SAMTOOLS_STATS') } == 2
             assert ok.count { it.startsWith('SAMTOOLS_FLAGSTAT') } == 2
             ['S1', 'S2'].each { s ->
-                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
                 assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
                 assert file("${outputDir}/results/reports/samtools/${s}/${s}.stats").exists()
                 assert file("${outputDir}/results/reports/samtools/${s}/${s}.flagstat").exists()
-                assert !file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+                assert !file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam").exists()
             }
         }
     }
-    test("apply_bqsr false: align only, publishing .md and the table, skipping APPLYBQSR and quantization") {
+    test("apply_bqsr false, mismatched formats: align only, SAMTOOLS_FINALIZE converts .md to the requested format") {
         when { params {
             input = "${projectDir}/tests/fixtures/main_pipeline/fastq.csv"; genome = 'null'
             ref_fasta = "${projectDir}/tests/fixtures/genome/reference.fasta"
@@ -38,6 +38,7 @@ nextflow_pipeline {
             known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
             intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
             apply_bqsr = false
+            output_fmt = 'cram'
             outdir = "${outputDir}/results"
         } }
         then {
@@ -94,7 +95,7 @@ nextflow_pipeline {
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('QUANTIZE_QUALS') } == 2
             ['S1', 'S2'].each { s ->
-                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
+                assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.bam").exists()
             }
         }
     }
@@ -106,6 +107,7 @@ nextflow_pipeline {
             known_sites = "${projectDir}/tests/fixtures/genome/known_sites.vcf.gz"
             intervals = "${projectDir}/tests/fixtures/genome/intervals.bed"
             publish_markduplicates = true
+            output_fmt = 'cram'
             cram_version = '3.1'
             outdir = "${outputDir}/results"
         } }
@@ -114,7 +116,6 @@ nextflow_pipeline {
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('SAMTOOLS_FINALIZE_RAW') } == 2
             ['S1', 'S2'].each { s ->
-                // The recalibrated, quantized final output is unaffected -- this is an extra artifact.
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
                 assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram").exists()
                 assert file("${outputDir}/results/preprocessing/markduplicates/${s}/${s}.md.cram.crai").exists()
@@ -166,7 +167,7 @@ nextflow_pipeline {
             assert workflow.success
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 0
-            assert file("${outputDir}/results/preprocessing/markduplicates/S1/S1.md.cram").exists()
+            assert file("${outputDir}/results/preprocessing/markduplicates/S1/S1.md.bam").exists()
             def log = file("${outputDir}/../meta/nextflow.log").text
             assert log.contains('No known sites supplied: BQSR is skipped')
             assert log.contains('No intervals supplied')
@@ -218,7 +219,7 @@ nextflow_pipeline {
             def ok = workflow.trace.succeeded()*.name
             assert ok.count { it.startsWith('PARABRICKS_FQ2BAM') } == 2
             assert file("${outputDir}/results/preprocessing/fastp/S1/S1_1_1.trimmed.fastq.gz").exists()
-            assert file("${outputDir}/results/preprocessing/markduplicates/S2/S2.md.cram").exists()
+            assert file("${outputDir}/results/preprocessing/markduplicates/S2/S2.md.bam").exists()
         }
     }
     test("a sample with paired lanes and a singleton lane: one fq2bam per input kind, then one markdup over all reads") {
@@ -242,7 +243,7 @@ nextflow_pipeline {
             assert file("${out}/preprocessing/recal_table/S1/S1.table").exists()
             assert file("${out}/reports/markduplicates/S1/S1.duplicate-metrics.txt").exists()
             assert file("${out}/reports/parabricks_qc/S1/S1_qc_metrics").exists()
-            assert file("${out}/preprocessing/recalibrated/S1/S1.recal.cram").exists()
+            assert file("${out}/preprocessing/recalibrated/S1/S1.recal.bam").exists()
         }
     }
 
@@ -282,7 +283,7 @@ nextflow_pipeline {
             assert workflow.success
             assert workflow.trace.succeeded()*.name.count { it.startsWith('PARABRICKS_APPLYBQSR') } == 2
             ['S1', 'S2'].each { s ->
-                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
                 assert file("${outputDir}/results/preprocessing/recal_table/${s}/${s}.table").exists()
             }
         }

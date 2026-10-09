@@ -13,6 +13,7 @@ nextflow_pipeline {
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir        = "${outputDir}/results"
+                output_fmt    = 'cram'
             }
         }
         then {
@@ -60,7 +61,7 @@ nextflow_pipeline {
         }
     }
 
-    test("quantization disabled, CRAM output (default): SAMTOOLS_FINALIZE still runs -- APPLYBQSR only indexes for BAM") {
+    test("quantization disabled, CRAM output: SAMTOOLS_FINALIZE still runs -- APPLYBQSR only indexes for BAM") {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
@@ -69,6 +70,7 @@ nextflow_pipeline {
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir                 = "${outputDir}/results"
                 quantize_quals_enabled = false
+                output_fmt             = 'cram'
             }
         }
         then {
@@ -91,14 +93,14 @@ nextflow_pipeline {
                 ref_fasta_fai          = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir                 = "${outputDir}/results"
                 quantize_quals_enabled = false
-                output_fmt             = 'bam'
+                output_fmt             = 'cram'
             }
         }
         then {
             assert workflow.success
             def log = file("${outputDir}/../meta/nextflow.log").text.replaceAll(/\u001B\[[0-9;]*m/, '')
             assert log.contains('Only displaying parameters that differ from the pipeline defaults')
-            assert log =~ /output_fmt\s*: bam/
+            assert log =~ /output_fmt\s*: cram/
             assert log =~ /quantize_quals_enabled\s*: false/
             assert !(log =~ /static_quantized_quals\s*:/)
             assert !(log =~ /seq_platform\s*:/)
@@ -113,6 +115,7 @@ nextflow_pipeline {
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir        = "${outputDir}/results"
+                output_fmt    = 'cram'
                 cram_version  = '3.1'
             }
         }

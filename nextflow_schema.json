@@ -198,7 +198,7 @@
                 "output_fmt": {
                     "type": "string",
                     "description": "Final alignment format.",
-                    "default": "cram",
+                    "default": "bam",
                     "enum": [
                         "bam",
                         "cram"

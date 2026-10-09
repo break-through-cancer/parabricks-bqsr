@@ -149,7 +149,7 @@
           "cram",
           "bam"
         ],
-        "default": "cram"
+        "default": "bam"
       },
       "cram_version": {
         "title": "CRAM Version",
