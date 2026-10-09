@@ -107,3 +107,14 @@ def test_same_sample_in_two_input_datasets_is_an_error():
         build_samplesheet(files(
             "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
         ) + [f"{other}/parabricks/S1/S1.bam", f"{other}/parabricks/S1/S1.bam.bai", f"{other}/parabricks/S1/S1.table"])
+
+
+def test_bam_is_the_first_output_format_and_cram_version_shows_only_for_cram():
+    import json
+    form = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]
+    assert form["properties"]["output_fmt"]["enum"] == ["bam", "cram"]
+    assert form["properties"]["output_fmt"]["default"] == "bam"
+    assert "cram_version" not in form["properties"]
+    branches = {b["properties"]["output_fmt"]["enum"][0]: b for b in form["dependencies"]["output_fmt"]["oneOf"]}
+    assert "cram_version" not in branches["bam"]["properties"]
+    assert branches["cram"]["properties"]["cram_version"]["default"] == "3.0"

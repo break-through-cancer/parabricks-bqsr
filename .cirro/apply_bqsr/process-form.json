@@ -4,19 +4,18 @@
     "properties": {
       "output_fmt": {
         "title": "Output Format",
-        "description": "Format of the published recalibrated alignment. CRAM is smaller; it is written against the GATK.GRCh38 reference the alignment used.",
+        "description": "Format of the published recalibrated alignment. CRAM is smaller.",
         "type": "string",
-        "enum": ["cram", "bam"],
+        "enum": ["bam", "cram"],
         "default": "bam"
       },
-      "cram_version": {"title": "CRAM Version", "description": "3.0 is readable by essentially all tools. 3.1 is smaller, but some tools (including the coverage QC, which is then skipped) cannot read it.", "type": "string", "enum": ["3.0", "3.1"], "default": "3.0"},
       "quantization": {
         "title": "Quality-Score Quantization",
         "type": "object",
         "properties": {
           "quantize_quals_enabled": {
             "title": "Quantize Quality Scores",
-            "description": "Replicate GATK ApplyBQSR static quantization after Parabricks applybqsr. Only the quantized file is published. Turn off to publish the unquantized recalibrated file instead.",
+            "description": "Replicate GATK ApplyBQSR static quantization. Turn off to publish the unquantized recalibrated file.",
             "type": "boolean",
             "default": true
           },
@@ -37,11 +36,28 @@
           },
           "round_down_quantized": {
             "title": "Round Down",
-            "description": "Round each score down to the largest bin at or below it, instead of the nearest bin in probability space (GATK --round-down-quantized).",
+            "description": "Round down to the largest bin at or below each score, instead of the nearest bin in probability space.",
             "type": "boolean",
             "default": false
           }
         }
+      }
+    },
+    "dependencies": {
+      "output_fmt": {
+        "oneOf": [
+          {
+            "properties": {
+              "output_fmt": {"enum": ["bam"]}
+            }
+          },
+          {
+            "properties": {
+              "output_fmt": {"enum": ["cram"]},
+              "cram_version": {"title": "CRAM Version", "description": "3.0 is readable by essentially all tools; 3.1 is smaller but some tools (and coverage QC, which is skipped) cannot read it.", "type": "string", "enum": ["3.0", "3.1"], "default": "3.0"}
+            }
+          }
+        ]
       }
     }
   },

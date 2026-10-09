@@ -44,7 +44,7 @@
                       "custom"
                     ],
                     "default": "gatk_calling_regions",
-                    "description": "Restricts BQSR table building only (never which reads are output). gatk_calling_regions: GATK's WGS calling regions (recommended for low coverage). none: genome-wide. custom: your own BED, e.g. WES targets."
+                    "description": "Restricts BQSR table building only, never which reads are output. Default: GATK WGS calling regions; custom: your own BED (e.g. WES targets)."
                   }
                 },
                 "dependencies": {
@@ -146,32 +146,22 @@
         "title": "Output Format",
         "type": "string",
         "enum": [
-          "cram",
-          "bam"
+          "bam",
+          "cram"
         ],
         "default": "bam"
       },
-      "cram_version": {
-        "title": "CRAM Version",
-        "description": "3.0 is readable by essentially all tools. 3.1 is smaller, but some tools (including the coverage QC, which is then skipped) cannot read it.",
-        "type": "string",
-        "enum": [
-          "3.0",
-          "3.1"
-        ],
-        "default": "3.0"
-      },
       "publish_markduplicates": {
-        "title": "Publish duplicate-marked (pre-BQSR) alignment",
+        "title": "Also publish duplicate-marked alignment",
         "type": "boolean",
         "default": false,
-        "description": "Also publish the duplicate-marked alignment from before BQSR, in the Output Format above (CRAM at the CRAM Version above, for long-term storage, or BAM). Only has an effect when known sites are supplied; a later alignment-entry run can then apply BQSR -- with any quantization choice -- without repeating alignment. Off by default: this extra file runs roughly 2-3x the size of the final quantized output (CRAM) or larger (BAM)."
+        "description": "Keep the pre-BQSR alignment (known sites only) so BQSR can be re-applied later without re-aligning. Adds a large extra file."
       },
       "apply_bqsr": {
         "title": "Apply BQSR",
         "type": "boolean",
         "default": true,
-        "description": "Run applybqsr (and quantization) in this same run. Off: align only, publishing the markduplicates alignment and BQSR table as this run's output; apply BQSR later with a separate alignment-entry run against them, choosing quantization then. No effect without known sites."
+        "description": "Off: align only, publishing the duplicate-marked alignment and BQSR table to apply later. No effect without known sites."
       },
       "read_trimming": {
         "title": "Read Trimming (fastp)",
@@ -216,7 +206,7 @@
               "off"
             ],
             "default": "auto",
-            "description": "Applies whether or not trimming is enabled. auto: trimmed on two-colour instruments (NovaSeq, NextSeq), as fastp and nf-core/sarek do. off: align the original reads."
+            "description": "Applies even when trimming is off. auto: trim on two-colour instruments (NovaSeq, NextSeq). off: align the original reads."
           },
           "length_required": {
             "title": "Minimum read length",
@@ -257,25 +247,46 @@
             "default": 2,
             "minimum": 1,
             "maximum": 4,
-            "description": "1-4. 2 (default) is about 23% faster than 1 for about 8% more alignment cost on a 21x sample; 4 fills a whole g5.12xlarge. Use 1 to minimise cost."
+            "description": "1-4. More GPUs align faster; use 1 to minimise cost."
           },
           "fq2bam_low_memory": {
             "title": "fq2bam low-memory mode",
             "type": "boolean",
             "default": false,
-            "description": "One BWA stream per GPU. Off by default (faster; fits the A10G 24 GB). Turn on only if alignment runs out of GPU memory."
+            "description": "One BWA stream per GPU. Turn on only if alignment runs out of GPU memory."
           },
           "fq2bam_memory_gb": {
             "title": "fq2bam memory override (GB)",
             "type": "integer",
             "minimum": 16,
             "maximum": 768,
-            "description": "Leave empty for the default (44 GB per GPU, at least 64). For deep samples (about 60x and up) set e.g. 176 with 2 GPUs so the first attempt is not killed for memory. Retries double and triple it."
+            "description": "Leave empty for the default (44 GB per GPU, at least 64). For deep samples (60x+) set e.g. 176 with 2 GPUs to avoid a memory kill."
           }
         }
       }
     },
     "dependencies": {
+      "output_fmt": {
+        "oneOf": [
+          {
+            "properties": {
+              "output_fmt": { "enum": ["bam"] }
+            }
+          },
+          {
+            "properties": {
+              "output_fmt": { "enum": ["cram"] },
+              "cram_version": {
+                "title": "CRAM Version",
+                "description": "3.0 is readable by essentially all tools; 3.1 is smaller but some tools (and coverage QC, which is skipped) cannot read it.",
+                "type": "string",
+                "enum": ["3.0", "3.1"],
+                "default": "3.0"
+              }
+            }
+          }
+        ]
+      },
       "apply_bqsr": {
         "oneOf": [
           {

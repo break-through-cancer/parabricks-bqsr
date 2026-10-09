@@ -308,3 +308,14 @@ def test_quantization_section_only_offered_when_apply_bqsr_is_on():
     off_branch = [b for b in branches if b["properties"]["apply_bqsr"]["enum"] == [False]][0]
     assert on_branch["properties"]["quantization"]["properties"]["quantize_quals_enabled"]["default"] is True
     assert "quantization" not in off_branch["properties"]
+
+
+def test_bam_is_the_first_output_format_and_cram_version_shows_only_for_cram():
+    import json
+    form = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]
+    assert form["properties"]["output_fmt"]["enum"] == ["bam", "cram"]
+    assert form["properties"]["output_fmt"]["default"] == "bam"
+    assert "cram_version" not in form["properties"]
+    branches = {b["properties"]["output_fmt"]["enum"][0]: b for b in form["dependencies"]["output_fmt"]["oneOf"]}
+    assert "cram_version" not in branches["bam"]["properties"]
+    assert branches["cram"]["properties"]["cram_version"]["default"] == "3.0"
