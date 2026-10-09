@@ -267,35 +267,65 @@
         "title": "Read Trimming (fastp)",
         "type": "object",
         "properties": {
-          "trim_fastq": {
-            "title": "Trim reads",
-            "type": "boolean",
-            "default": false,
-            "description": "fastp always runs for read counts and QC; this enables adapter trimming and the options below."
-          },
-          "clip_r1": {
-            "title": "Clip R1 (5')",
-            "type": "integer",
-            "default": 0,
-            "minimum": 0
-          },
-          "clip_r2": {
-            "title": "Clip R2 (5')",
-            "type": "integer",
-            "default": 0,
-            "minimum": 0
-          },
-          "three_prime_clip_r1": {
-            "title": "Clip R1 (3')",
-            "type": "integer",
-            "default": 0,
-            "minimum": 0
-          },
-          "three_prime_clip_r2": {
-            "title": "Clip R2 (3')",
-            "type": "integer",
-            "default": 0,
-            "minimum": 0
+          "trim": {
+            "title": "Adapter and clip trimming",
+            "type": "object",
+            "properties": {
+              "trim_fastq": {
+                "title": "Trim reads",
+                "type": "boolean",
+                "default": false,
+                "description": "fastp always runs for read counts and QC; this adds adapter trimming and base clipping."
+              }
+            },
+            "dependencies": {
+              "trim_fastq": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "trim_fastq": {
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "clip_r1": {
+                        "title": "Clip R1 (5')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "clip_r2": {
+                        "title": "Clip R2 (5')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "three_prime_clip_r1": {
+                        "title": "Clip R1 (3')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "three_prime_clip_r2": {
+                        "title": "Clip R2 (3')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "trim_fastq": {
+                        "enum": [
+                          false
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
           },
           "poly_g_trimming": {
             "title": "Poly-G tail trimming",

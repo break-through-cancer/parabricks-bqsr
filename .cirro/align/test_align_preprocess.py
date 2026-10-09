@@ -328,3 +328,15 @@ def test_alignment_resources_are_their_own_block_above_advanced():
     assert keys.index("alignment_resources") == keys.index("advanced") - 1
     assert list(props["alignment_resources"]["properties"]) == ["fq2bam_gpus", "fq2bam_low_memory", "fq2bam_memory_gb"]
     assert "fq2bam_gpus" not in props["advanced"]["properties"]
+
+
+def test_clip_settings_only_offered_when_trimming_is_on():
+    import json
+    here = pathlib.Path(__file__).parent
+    trim = json.loads((here / "process-form.json").read_text())["form"]["properties"]["read_trimming"]["properties"]["trim"]
+    assert list(trim["properties"]) == ["trim_fastq"]
+    branches = {b["properties"]["trim_fastq"]["enum"][0]: b for b in trim["dependencies"]["trim_fastq"]["oneOf"]}
+    assert set(branches[True]["properties"]) == {"trim_fastq", "clip_r1", "clip_r2", "three_prime_clip_r1", "three_prime_clip_r2"}
+    assert set(branches[False]["properties"]) == {"trim_fastq"}
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["clip_r1"] == "$.dataset.params.read_trimming.trim.clip_r1"
