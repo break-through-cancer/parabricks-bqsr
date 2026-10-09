@@ -10,7 +10,7 @@ include { PARABRICKS_FQ2BAM                         } from './modules/local/para
 include { PARABRICKS_FQ2BAM_PART                    } from './modules/local/parabricks_fq2bam_part'
 include { PARABRICKS_MARKDUP                        } from './modules/local/parabricks_markdup'
 include { PARABRICKS_APPLYBQSR                      } from './modules/local/parabricks_applybqsr'
-include { QUANTIZE_QUALS                            } from './modules/local/quantize_quals'
+include { QUANTIZE_QUALS; quantizeHistJson          } from './modules/local/quantize_quals'
 include { SAMTOOLS_FINALIZE                         } from './modules/local/samtools_finalize'
 include { SAMTOOLS_FINALIZE as SAMTOOLS_FINALIZE_RAW } from './modules/local/samtools_finalize'
 include { SAMTOOLS_STATS                            } from './modules/local/samtools_stats'
@@ -134,7 +134,10 @@ workflow {
     if (quantize) {
         QUANTIZE_QUALS(to_finish, ref_ch, params.output_fmt)
         final_ch = QUANTIZE_QUALS.out.alignment
-        quant_mqc = QUANTIZE_QUALS.out.mqc.mix(QUANTIZE_QUALS.out.hist)
+        quant_mqc = QUANTIZE_QUALS.out.mqc.mix(
+            QUANTIZE_QUALS.out.hist.collect().map { files -> quantizeHistJson(files) }
+                .collectFile(name: 'quantize_quals_hist_mqc.json', newLine: false)
+        )
     } else if (use_direct_final) {
         final_ch = direct_final
         quant_mqc = channel.empty()

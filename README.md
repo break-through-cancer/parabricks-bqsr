@@ -214,8 +214,8 @@ appear in that run's task list at all. This is expected, not an error.
 `reports/samtools/<s>/<s>.stats` reads the pre-quantization alignment rather than the
 published file (BQSR and quantization only rewrite quality bytes), while `<s>.flagstat`
 reads the true published file and backs the read-count check below. MultiQC also plots the
-quality-score distribution before and after quantization, from the `reports/quantize/<s>/`
-log.
+quality-score distribution before and after quantization (Before/After tabs, one stacked
+bar per sample), from the `reports/quantize/<s>/` log.
 
 ### Read-count checks
 
