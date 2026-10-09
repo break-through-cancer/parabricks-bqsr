@@ -374,7 +374,7 @@
             "type": "integer",
             "minimum": 16,
             "maximum": 768,
-            "description": "Leave empty for the default (44 GB per GPU, at least 64). For deep samples (60x+) set e.g. 176 with 2 GPUs to avoid a memory kill."
+            "description": "Leave empty for the default (44 GB per GPU, minimum 64 GB total). For deep samples (60x+) set e.g. 176 with 2 GPUs to avoid a memory kill; 352 recommended for 105x."
           }
         }
       },
