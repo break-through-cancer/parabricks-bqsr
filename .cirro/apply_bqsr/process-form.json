@@ -1,0 +1,92 @@
+{
+  "form": {
+    "type": "object",
+    "properties": {
+      "output": {
+        "title": "Output",
+        "type": "object",
+        "properties": {
+          "output_fmt": {
+            "title": "Output Format",
+            "description": "Format of the published recalibrated alignment. CRAM is smaller.",
+            "type": "string",
+            "enum": [
+              "bam",
+              "cram"
+            ],
+            "default": "bam"
+          }
+        },
+        "dependencies": {
+          "output_fmt": {
+            "oneOf": [
+              {
+                "properties": {
+                  "output_fmt": {
+                    "enum": [
+                      "bam"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "output_fmt": {
+                    "enum": [
+                      "cram"
+                    ]
+                  },
+                  "cram_version": {
+                    "title": "CRAM Version",
+                    "description": "3.0 is readable by essentially all tools; 3.1 is smaller but some tools (and coverage QC, which is skipped) cannot read it.",
+                    "type": "string",
+                    "enum": [
+                      "3.0",
+                      "3.1"
+                    ],
+                    "default": "3.0"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "quantization": {
+        "title": "Quality-Score Quantization Options",
+        "type": "object",
+        "properties": {
+          "quantize_quals_enabled": {
+            "title": "Quantize Quality Scores",
+            "description": "Replicate GATK ApplyBQSR static quantization. Turn off to publish the unquantized recalibrated file.",
+            "type": "boolean",
+            "default": true
+          },
+          "static_quantized_quals": {
+            "title": "Static Quantization Bins",
+            "description": "Comma-separated Phred values (GATK --static-quantized-quals).",
+            "type": "string",
+            "default": "10,20,30",
+            "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"
+          },
+          "preserve_qscores_less_than": {
+            "title": "Preserve Quality Scores Below",
+            "description": "Quality scores below this value remain unchanged (GATK --preserve-qscores-less-than). Must be below the smallest bin.",
+            "type": "integer",
+            "default": 6,
+            "minimum": 0,
+            "maximum": 93
+          },
+          "round_down_quantized": {
+            "title": "Round Down",
+            "description": "Round down to the largest bin at or below each score, instead of the nearest bin in probability space.",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "description": "Collapses base qualities into a few bins to shrink the output; see the README lookup table for how scores map."
+      }
+    }
+  },
+  "ui": {}
+}

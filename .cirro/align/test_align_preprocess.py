@@ -6,7 +6,7 @@ import pytest
 import importlib.util
 import pathlib
 
-_spec = importlib.util.spec_from_file_location("fastq_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
+_spec = importlib.util.spec_from_file_location("align_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
 _preprocess = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_preprocess)
 apply_genome_params = _preprocess.apply_genome_params
@@ -159,8 +159,8 @@ def test_form_offers_low_memory_off_by_default_and_hides_gpuwrite():
     import json
     here = pathlib.Path(__file__).parent
     form = (here / "process-form.json").read_text()
-    advanced = json.loads(form)["form"]["properties"]["advanced"]["properties"]
-    assert advanced["fq2bam_low_memory"]["default"] is False
+    resources = json.loads(form)["form"]["properties"]["alignment_resources"]["properties"]
+    assert resources["fq2bam_low_memory"]["default"] is False
     assert "fq2bam_gpuwrite" not in form
     assert "fq2bam_gpuwrite" not in (here / "process-input.json").read_text()
 
@@ -189,7 +189,7 @@ def test_igenomes_custom_intervals_without_a_file_is_an_error():
 
 def test_gpu_field_defaults_to_2_and_caps_at_4():
     import json
-    adv = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["advanced"]["properties"]
+    adv = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["alignment_resources"]["properties"]
     assert adv["fq2bam_gpus"]["default"] == 2 and adv["fq2bam_gpus"]["maximum"] == 4
 
 
@@ -259,12 +259,12 @@ def test_form_does_not_expose_the_fq2bam_intermediate_format():
 def test_form_offers_an_optional_fq2bam_memory_override_and_maps_it():
     import json
     here = pathlib.Path(__file__).parent
-    advanced = json.loads((here / "process-form.json").read_text())["form"]["properties"]["advanced"]
+    advanced = json.loads((here / "process-form.json").read_text())["form"]["properties"]["alignment_resources"]
     field = advanced["properties"]["fq2bam_memory_gb"]
     assert field["type"] == "integer" and field["minimum"] == 16 and field["maximum"] == 768
     assert "default" not in field and "fq2bam_memory_gb" not in advanced.get("required", [])
     mapping = json.loads((here / "process-input.json").read_text())
-    assert mapping["fq2bam_memory_gb"] == "$.dataset.params.advanced.fq2bam_memory_gb"
+    assert mapping["fq2bam_memory_gb"] == "$.dataset.params.alignment_resources.fq2bam_memory_gb"
 
 
 def test_form_offers_poly_g_trimming_auto_by_default_and_maps_it():
@@ -279,11 +279,64 @@ def test_form_offers_poly_g_trimming_auto_by_default_and_maps_it():
     assert "trim_nextseq" not in mapping
 
 
-def test_form_offers_publish_raw_alignment_off_by_default_and_maps_it():
+def test_form_offers_publish_markduplicates_off_by_default_and_maps_it():
     import json
     here = pathlib.Path(__file__).parent
     props = json.loads((here / "process-form.json").read_text())["form"]["properties"]
-    field = props["publish_raw_alignment"]
+    field = props["publish_markduplicates"]
     assert field["type"] == "boolean" and field["default"] is False
     mapping = json.loads((here / "process-input.json").read_text())
-    assert mapping["publish_raw_alignment"] == "$.dataset.params.publish_raw_alignment"
+    assert mapping["publish_markduplicates"] == "$.dataset.params.publish_markduplicates"
+
+
+def test_form_offers_apply_bqsr_on_by_default_and_maps_it():
+    import json
+    here = pathlib.Path(__file__).parent
+    props = json.loads((here / "process-form.json").read_text())["form"]["properties"]
+    field = props["bqsr"]["properties"]["apply_bqsr"]
+    assert field["type"] == "boolean" and field["default"] is True
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["apply_bqsr"] == "$.dataset.params.bqsr.apply_bqsr"
+
+
+def test_quantization_section_only_offered_when_apply_bqsr_is_on():
+    import json
+    group = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["bqsr"]
+    assert "quantization" not in group["properties"]
+    branches = group["dependencies"]["apply_bqsr"]["oneOf"]
+    on_branch = [b for b in branches if b["properties"]["apply_bqsr"]["enum"] == [True]][0]
+    off_branch = [b for b in branches if b["properties"]["apply_bqsr"]["enum"] == [False]][0]
+    assert on_branch["properties"]["quantization"]["properties"]["quantize_quals_enabled"]["default"] is True
+    assert "quantization" not in off_branch["properties"]
+
+
+def test_bam_is_the_first_output_format_and_cram_version_shows_only_for_cram():
+    import json
+    group = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["output"]
+    assert group["properties"]["output_fmt"]["enum"] == ["bam", "cram"]
+    assert group["properties"]["output_fmt"]["default"] == "bam"
+    assert "cram_version" not in group["properties"]
+    branches = {b["properties"]["output_fmt"]["enum"][0]: b for b in group["dependencies"]["output_fmt"]["oneOf"]}
+    assert "cram_version" not in branches["bam"]["properties"]
+    assert branches["cram"]["properties"]["cram_version"]["default"] == "3.0"
+
+
+def test_alignment_resources_are_their_own_block_above_advanced():
+    import json
+    props = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]
+    keys = list(props)
+    assert keys.index("alignment_resources") == keys.index("advanced") - 1
+    assert list(props["alignment_resources"]["properties"]) == ["fq2bam_gpus", "fq2bam_low_memory", "fq2bam_memory_gb"]
+    assert "fq2bam_gpus" not in props["advanced"]["properties"]
+
+
+def test_clip_settings_only_offered_when_trimming_is_on():
+    import json
+    here = pathlib.Path(__file__).parent
+    trim = json.loads((here / "process-form.json").read_text())["form"]["properties"]["read_trimming"]["properties"]["trim"]
+    assert list(trim["properties"]) == ["trim_fastq"]
+    branches = {b["properties"]["trim_fastq"]["enum"][0]: b for b in trim["dependencies"]["trim_fastq"]["oneOf"]}
+    assert set(branches[True]["properties"]) == {"trim_fastq", "clip_r1", "clip_r2", "three_prime_clip_r1", "three_prime_clip_r2"}
+    assert set(branches[False]["properties"]) == {"trim_fastq"}
+    mapping = json.loads((here / "process-input.json").read_text())
+    assert mapping["clip_r1"] == "$.dataset.params.read_trimming.trim.clip_r1"

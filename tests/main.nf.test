@@ -13,6 +13,7 @@ nextflow_pipeline {
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir        = "${outputDir}/results"
+                output_fmt    = 'cram'
             }
         }
         then {
@@ -34,7 +35,7 @@ nextflow_pipeline {
         }
     }
 
-    test("quantization disabled: every sample goes APPLYBQSR -> SAMTOOLS_FINALIZE and is published as indexed BAM") {
+    test("quantization disabled, BAM output: APPLYBQSR indexes and publishes directly, skipping SAMTOOLS_FINALIZE") {
         when {
             params {
                 input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
@@ -49,13 +50,37 @@ nextflow_pipeline {
         then {
             assert workflow.success
             def succeeded = workflow.trace.succeeded()*.name
-            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
+            assert succeeded.count { it.contains('PARABRICKS_APPLYBQSR') } == 2
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 0
             assert succeeded.count { it.contains('QUANTIZE_QUALS') } == 0
             ['SAMPLE_A', 'SAMPLE_B'].each { s ->
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam").exists()
                 assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.bam.bai").exists()
             }
             assert file("${outputDir}/results/multiqc/multiqc_report.html").exists()
+        }
+    }
+
+    test("quantization disabled, CRAM output: SAMTOOLS_FINALIZE still runs -- APPLYBQSR only indexes for BAM") {
+        when {
+            params {
+                input         = "${projectDir}/tests/fixtures/main_pipeline/samplesheet.csv"
+                genome        = 'null'
+                ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
+                ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
+                outdir                 = "${outputDir}/results"
+                quantize_quals_enabled = false
+                output_fmt             = 'cram'
+            }
+        }
+        then {
+            assert workflow.success
+            def succeeded = workflow.trace.succeeded()*.name
+            assert succeeded.count { it.contains('SAMTOOLS_FINALIZE') } == 2
+            ['SAMPLE_A', 'SAMPLE_B'].each { s ->
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram").exists()
+                assert file("${outputDir}/results/preprocessing/recalibrated/${s}/${s}.recal.cram.crai").exists()
+            }
         }
     }
 
@@ -68,14 +93,14 @@ nextflow_pipeline {
                 ref_fasta_fai          = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir                 = "${outputDir}/results"
                 quantize_quals_enabled = false
-                output_fmt             = 'bam'
+                output_fmt             = 'cram'
             }
         }
         then {
             assert workflow.success
             def log = file("${outputDir}/../meta/nextflow.log").text.replaceAll(/\u001B\[[0-9;]*m/, '')
             assert log.contains('Only displaying parameters that differ from the pipeline defaults')
-            assert log =~ /output_fmt\s*: bam/
+            assert log =~ /output_fmt\s*: cram/
             assert log =~ /quantize_quals_enabled\s*: false/
             assert !(log =~ /static_quantized_quals\s*:/)
             assert !(log =~ /seq_platform\s*:/)
@@ -90,6 +115,7 @@ nextflow_pipeline {
                 ref_fasta     = "${projectDir}/tests/fixtures/modules/reference.fasta"
                 ref_fasta_fai = "${projectDir}/tests/fixtures/modules/reference.fasta.fai"
                 outdir        = "${outputDir}/results"
+                output_fmt    = 'cram'
                 cram_version  = '3.1'
             }
         }

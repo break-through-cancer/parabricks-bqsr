@@ -13,12 +13,15 @@ process PARABRICKS_APPLYBQSR {
 
     output:
     tuple val(meta), path("${meta.sample}.recal.bam"), emit: bam
+    tuple val(meta), path("${meta.sample}.recal.bam.bai"), optional: true, emit: bai
     tuple val(meta), path("${meta.sample}.input.idxstats"), emit: idxstats
 
     script:
     def expected_index = "${alignment}.${alignment.name.endsWith('.cram') ? 'crai' : 'bai'}"
     def args = applybqsrArgs(alignment, recal_table, "${meta.sample}.recal.bam",
         [cpus: task.cpus, num_gpus: task.accelerator ? task.accelerator.request : 1])
+    // Skips a separate SAMTOOLS_FINALIZE task when nothing else needs this file.
+    def index_here = params.output_fmt == 'bam' && params.quantize_quals_enabled.toString() != 'true'
     """
     set -euo pipefail
     ${pbrunFunction()}
@@ -41,11 +44,14 @@ process PARABRICKS_APPLYBQSR {
     samtools idxstats -@ ${task.cpus} ${alignment} > ${meta.sample}.input.idxstats
 
     pbrun applybqsr --ref ${ref_fasta} ${args}
+    ${index_here ? "samtools index -@ ${task.cpus} ${meta.sample}.recal.bam" : ''}
     """
 
     stub:
+    def index_here = params.output_fmt == 'bam' && params.quantize_quals_enabled.toString() != 'true'
     """
     touch ${meta.sample}.recal.bam
+    ${index_here ? "touch ${meta.sample}.recal.bam.bai" : ''}
     printf 'chrT\\t500\\t0\\t0\\n*\\t0\\t0\\t0\\n' > ${meta.sample}.input.idxstats
     """
 }

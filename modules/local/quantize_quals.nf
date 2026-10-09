@@ -13,7 +13,7 @@ process QUANTIZE_QUALS {
     tuple val(meta), path("${meta.sample}.${meta.suffix}.${output_fmt}"), path("${meta.sample}.${meta.suffix}.${output_fmt}.${output_fmt == 'cram' ? 'crai' : 'bai'}"), emit: alignment
     path "${meta.sample}.quantize.log", emit: log
     path "${meta.sample}.quantize_mqc.tsv", emit: mqc
-    path "${meta.sample}.quantize_hist_mqc.tsv", emit: hist
+    path "${meta.sample}.quantize_hist.tsv", emit: hist
 
     script:
     def args = task.ext.args ?: ''
@@ -52,16 +52,9 @@ process QUANTIZE_QUALS {
     sort -t '\t' -k1,1 before.tsv -o before.sorted.tsv
     sort -t '\t' -k1,1 after.tsv -o after.sorted.tsv
     {
-        echo "# id: 'quantize_quals_hist'"
-        echo "# section_name: 'Quality-score distribution, before vs after quantization'"
-        echo "# plot_type: 'bargraph'"
-        echo "# pconfig:"
-        echo "#     xlab: 'Quality score'"
-        echo "#     ylab: '% of bases'"
-        echo "#     stacking: null"
         printf 'Category\\tbefore\\tafter\\n'
         join -t '\t' -a1 -a2 -e 0 -o 0,1.2,2.2 before.sorted.tsv after.sorted.tsv | awk -F'\\t' '{sub(/^0/,"",\$1); print "Q"\$1"\\t"\$2"\\t"\$3}'
-    } > ${meta.sample}.quantize_hist_mqc.tsv
+    } > ${meta.sample}.quantize_hist.tsv
     """
 
     stub:
@@ -69,6 +62,26 @@ process QUANTIZE_QUALS {
     """
     touch ${meta.sample}.${meta.suffix}.${output_fmt} ${meta.sample}.${meta.suffix}.${output_fmt}.${idx} ${meta.sample}.quantize.log
     printf 'Sample\\tRecords\\n${meta.sample}\\t0\\n' > ${meta.sample}.quantize_mqc.tsv
-    printf 'Category\\tbefore\\tafter\\n' > ${meta.sample}.quantize_hist_mqc.tsv
+    printf 'Category\\tbefore\\tafter\\n' > ${meta.sample}.quantize_hist.tsv
     """
+}
+
+def histJsonSeries(String sample, List rows, int col) {
+    def vals = rows.collect { r -> "\"${r[0]}\": ${r[col]}" }.join(', ')
+    "\"${sample}\": {${vals}}".toString()
+}
+
+def quantizeHistJson(List files) {
+    def before = []
+    def after = []
+    files.sort { f -> f.name }.each { f ->
+        def sample = f.name.replace('.quantize_hist.tsv', '')
+        def rows = f.readLines().drop(1).findAll { l -> l }.collect { l -> l.split('\t') as List }
+        before << histJsonSeries(sample, rows, 1)
+        after << histJsonSeries(sample, rows, 2)
+    }
+    '{"id": "quantize_quals_hist", "section_name": "Quality-score distribution, before vs after quantization", ' +
+        '"plot_type": "bargraph", "pconfig": {"id": "quantize_quals_hist_plot", "title": "Quality-score distribution", ' +
+        '"ylab": "% of bases", "cpswitch": false, "data_labels": [{"name": "Before", "ylab": "% of bases"}, {"name": "After", "ylab": "% of bases"}]}, ' +
+        '"data": [{' + before.join(', ') + '}, {' + after.join(', ') + '}]}'
 }

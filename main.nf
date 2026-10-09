@@ -10,7 +10,7 @@ include { PARABRICKS_FQ2BAM                         } from './modules/local/para
 include { PARABRICKS_FQ2BAM_PART                    } from './modules/local/parabricks_fq2bam_part'
 include { PARABRICKS_MARKDUP                        } from './modules/local/parabricks_markdup'
 include { PARABRICKS_APPLYBQSR                      } from './modules/local/parabricks_applybqsr'
-include { QUANTIZE_QUALS                            } from './modules/local/quantize_quals'
+include { QUANTIZE_QUALS; quantizeHistJson          } from './modules/local/quantize_quals'
 include { SAMTOOLS_FINALIZE                         } from './modules/local/samtools_finalize'
 include { SAMTOOLS_FINALIZE as SAMTOOLS_FINALIZE_RAW } from './modules/local/samtools_finalize'
 include { SAMTOOLS_STATS                            } from './modules/local/samtools_stats'
@@ -30,9 +30,16 @@ workflow {
 
     ref_ch = Channel.value([file(refs.ref_fasta, checkIfExists: true), file(refs.ref_fasta_fai, checkIfExists: true)])
     def quantize = params.quantize_quals_enabled.toString() == 'true'
+    // Skips SAMTOOLS_FINALIZE when applybqsr's own BAM output already needs no change.
+    def applybqsr_direct = params.output_fmt == 'bam' && !quantize
+    def use_direct_final = false
+    def direct_final = channel.empty()
 
     if (entry == 'fastq') {
         def bqsr = refs.known_sites as boolean
+        def apply_bqsr = bqsr && params.apply_bqsr.toString() != 'false'
+        // Skips SAMTOOLS_FINALIZE when fq2bam/markdup's own output already needs no change.
+        def md_direct = !apply_bqsr && params.fq2bam_intermediate_fmt == params.output_fmt
         log.info intervalsMessage(refs)
         if (!bqsr) log.warn "No known sites supplied: BQSR is skipped; outputs are published as .md files under preprocessing/markduplicates/"
 
@@ -54,7 +61,7 @@ workflow {
                 def m = ordered[0][0]
                 [[sample: m.sample, patient: m.patient, status: m.status,
                   single_end: ordered.every { it[0].single_end }, lane_single_end: ordered.collect { it[0].single_end },
-                  read_groups: ordered.collect { it[0].read_group }], ordered.collectMany { it[1] }]
+                  read_groups: ordered.collect { it[0].read_group }, publish_directly: md_direct], ordered.collectMany { it[1] }]
             }
 
         PREPARE_KNOWN_SITES(refs.known_sites)
@@ -77,28 +84,35 @@ workflow {
         aligned_cram = PARABRICKS_FQ2BAM.out.cram.mix(PARABRICKS_MARKDUP.out.cram)
         aligned_table = PARABRICKS_FQ2BAM.out.table.mix(PARABRICKS_MARKDUP.out.table)
 
-        // With known sites, the pre-recalibration alignment is otherwise never published (only
-        // the table is, unconditionally, by PARABRICKS_FQ2BAM/MARKDUP's own publishDir) -- an
-        // alignment-entry run can later apply BQSR against it, with any quantization choice,
-        // without repeating alignment. No effect without known sites: the published .md file
-        // already is this alignment. Follows --output_fmt, same as the final output.
-        if (bqsr && params.publish_raw_alignment.toString() == 'true') {
+        // The pre-recalibration alignment is otherwise discarded once BQSR runs.
+        if (apply_bqsr && params.publish_markduplicates.toString() == 'true') {
             SAMTOOLS_FINALIZE_RAW(
                 aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] },
                 ref_ch, params.output_fmt
             )
         }
 
-        if (bqsr) {
+        if (apply_bqsr) {
             PARABRICKS_APPLYBQSR(
                 aligned_cram.join(aligned_table, failOnMismatch: true)
                     .map { meta, cram, crai, table -> [[sample: meta.sample], cram, crai, table] },
                 ref_ch
             )
             to_finish = PARABRICKS_APPLYBQSR.out.bam.map { meta, bam -> [meta + [suffix: 'recal'], bam] }
+            if (applybqsr_direct) {
+                use_direct_final = true
+                direct_final = PARABRICKS_APPLYBQSR.out.bam.join(PARABRICKS_APPLYBQSR.out.bai)
+                    .map { meta, bam, bai -> [meta + [suffix: 'recal'], bam, bai] }
+            }
         } else {
             to_finish = aligned_cram.map { meta, cram, _crai -> [[sample: meta.sample, suffix: 'md'], cram] }
+            if (md_direct) {
+                use_direct_final = true
+                direct_final = aligned_cram.map { meta, cram, crai -> [[sample: meta.sample, suffix: 'md'], cram, crai] }
+            }
         }
+        // Quantization is deferred along with BQSR when apply_bqsr=false.
+        quantize = quantize && (apply_bqsr || !bqsr)
         before_idxstats = PARABRICKS_FQ2BAM.out.idxstats.mix(PARABRICKS_MARKDUP.out.idxstats)
             .map { meta, idx -> [[sample: meta.sample], idx] }
         extra_qc = FASTP.out.json.map { it[1] }
@@ -108,6 +122,11 @@ workflow {
         SAMPLESHEET_TO_SAMPLES(params.input)
         PARABRICKS_APPLYBQSR(SAMPLESHEET_TO_SAMPLES.out.samples, ref_ch)
         to_finish = PARABRICKS_APPLYBQSR.out.bam.map { meta, bam -> [meta + [suffix: 'recal'], bam] }
+        if (applybqsr_direct) {
+            use_direct_final = true
+            direct_final = PARABRICKS_APPLYBQSR.out.bam.join(PARABRICKS_APPLYBQSR.out.bai)
+                .map { meta, bam, bai -> [meta + [suffix: 'recal'], bam, bai] }
+        }
         before_idxstats = PARABRICKS_APPLYBQSR.out.idxstats
         extra_qc = Channel.empty()
     }
@@ -115,19 +134,21 @@ workflow {
     if (quantize) {
         QUANTIZE_QUALS(to_finish, ref_ch, params.output_fmt)
         final_ch = QUANTIZE_QUALS.out.alignment
-        quant_mqc = QUANTIZE_QUALS.out.mqc.mix(QUANTIZE_QUALS.out.hist)
+        quant_mqc = QUANTIZE_QUALS.out.mqc.mix(
+            QUANTIZE_QUALS.out.hist.collect().map { files -> quantizeHistJson(files) }
+                .collectFile(name: 'quantize_quals_hist_mqc.json', newLine: false)
+        )
+    } else if (use_direct_final) {
+        final_ch = direct_final
+        quant_mqc = channel.empty()
     } else {
         SAMTOOLS_FINALIZE(to_finish, ref_ch, params.output_fmt)
         final_ch = SAMTOOLS_FINALIZE.out.alignment
         quant_mqc = Channel.empty()
     }
 
-    // Detailed stats read the pre-quantization alignment (always BAM here): everything it
-    // reports except quality-value histograms is unaffected by BQSR/quantization, and this
-    // avoids CRAM decode for samtools stats' mostly-single-threaded accumulation. flagstat
-    // instead reads the true published file, genome-wide/fastq-read-count integrity (read
-    // checks) and the mosdepth/CRAM-validity canary below both need to see what's actually
-    // delivered, not an earlier intermediate.
+    // stats reads the pre-quantization alignment (unaffected by BQSR/quantization except
+    // quality bytes); flagstat and mosdepth read the true published file.
     SAMTOOLS_STATS(to_finish, ref_ch)
     SAMTOOLS_FLAGSTAT(final_ch.map { meta, aln, _idx -> [meta, aln] }, ref_ch)
     if (params.output_fmt == 'cram' && params.cram_version == '3.1') {
@@ -157,7 +178,8 @@ def validateParams() {
     if (!params.input) error "Missing required parameter: input (path to samplesheet CSV). See README.md and assets/samplesheet.csv."
     if (!(params.output_fmt in ['bam', 'cram'])) error "Invalid output_fmt '${params.output_fmt}': must be 'bam' or 'cram'"
     if (!(params.quantize_quals_enabled.toString() in ['true', 'false'])) error "Invalid quantize_quals_enabled '${params.quantize_quals_enabled}': must be true or false"
-    if (!(params.publish_raw_alignment.toString() in ['true', 'false'])) error "Invalid publish_raw_alignment '${params.publish_raw_alignment}': must be true or false"
+    if (!(params.publish_markduplicates.toString() in ['true', 'false'])) error "Invalid publish_markduplicates '${params.publish_markduplicates}': must be true or false"
+    if (!(params.apply_bqsr.toString() in ['true', 'false'])) error "Invalid apply_bqsr '${params.apply_bqsr}': must be true or false"
     if (!(params.cram_version.toString() in ['3.0', '3.1'])) error "Invalid cram_version '${params.cram_version}': must be '3.0' or '3.1'"
     if (!(params.poly_g_trimming in ['auto', 'on', 'off'])) error "Invalid poly_g_trimming '${params.poly_g_trimming}': must be 'auto', 'on' or 'off'"
     if (!(params.markdups_se_mode in ['5prime', 'start-end'])) error "Invalid markdups_se_mode '${params.markdups_se_mode}': must be '5prime' or 'start-end'"

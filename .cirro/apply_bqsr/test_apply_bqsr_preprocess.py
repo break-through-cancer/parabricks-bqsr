@@ -3,7 +3,7 @@ import pytest
 import importlib.util
 import pathlib
 
-_spec = importlib.util.spec_from_file_location("alignment_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
+_spec = importlib.util.spec_from_file_location("apply_bqsr_preprocess", pathlib.Path(__file__).with_name("preprocess.py"))
 _preprocess = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_preprocess)
 build_samplesheet = _preprocess.build_samplesheet
@@ -37,16 +37,46 @@ def test_cram_and_multiple_samples_sorted():
     assert sheet.loc[1, "alignment_index"].endswith("S2.cram.crai")
 
 
-def test_other_stages_are_ignored():
+def test_recalibrated_stage_is_ignored():
+    # Applying the table again to an already-recalibrated alignment would recalibrate it twice.
     sheet = build_samplesheet(files(
         "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
         "recalibrated/S1/S1.recal.bam", "recalibrated/S1/S1.recal.bam.bai",
-        "markduplicates/S1/S1.md.cram", "markduplicates/S1/S1.md.cram.crai",
     ))
     assert sheet["alignment"].tolist() == [f"{ROOT}/parabricks/S1/S1.bam"]
 
 
-def test_no_parabricks_files():
+def test_our_own_markduplicates_layout_bam():
+    # This pipeline's own apply_bqsr=false output: alignment+index under markduplicates/,
+    # the table separately under recal_table/ -- not co-located like sarek_align's layout.
+    sheet = build_samplesheet(files(
+        "markduplicates/S1/S1.md.bam", "markduplicates/S1/S1.md.bam.bai", "recal_table/S1/S1.table",
+    ))
+    assert sheet.to_dict("records") == [{
+        "sample": "S1",
+        "alignment": f"{ROOT}/markduplicates/S1/S1.md.bam",
+        "alignment_index": f"{ROOT}/markduplicates/S1/S1.md.bam.bai",
+        "recal_table": f"{ROOT}/recal_table/S1/S1.table",
+    }]
+
+
+def test_our_own_markduplicates_layout_cram():
+    sheet = build_samplesheet(files(
+        "markduplicates/S1/S1.md.cram", "markduplicates/S1/S1.md.cram.crai", "recal_table/S1/S1.table",
+    ))
+    assert sheet.loc[0, "alignment"].endswith("S1.md.cram")
+    assert sheet.loc[0, "alignment_index"].endswith("S1.md.cram.crai")
+
+
+def test_sarek_and_our_own_layout_in_the_same_batch():
+    sheet = build_samplesheet(files(
+        "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
+        "markduplicates/S2/S2.md.bam", "markduplicates/S2/S2.md.bam.bai", "recal_table/S2/S2.table",
+    ))
+    assert list(sheet["sample"]) == ["S1", "S2"]
+
+
+def test_no_recognized_files():
     with pytest.raises(ValueError, match="preprocessing/parabricks"):
         build_samplesheet(files("recalibrated/S1/S1.recal.bam", "recalibrated/S1/S1.recal.bam.bai"))
 
@@ -77,3 +107,14 @@ def test_same_sample_in_two_input_datasets_is_an_error():
         build_samplesheet(files(
             "parabricks/S1/S1.bam", "parabricks/S1/S1.bam.bai", "parabricks/S1/S1.table",
         ) + [f"{other}/parabricks/S1/S1.bam", f"{other}/parabricks/S1/S1.bam.bai", f"{other}/parabricks/S1/S1.table"])
+
+
+def test_bam_is_the_first_output_format_and_cram_version_shows_only_for_cram():
+    import json
+    group = json.loads((pathlib.Path(__file__).parent / "process-form.json").read_text())["form"]["properties"]["output"]
+    assert group["properties"]["output_fmt"]["enum"] == ["bam", "cram"]
+    assert group["properties"]["output_fmt"]["default"] == "bam"
+    assert "cram_version" not in group["properties"]
+    branches = {b["properties"]["output_fmt"]["enum"][0]: b for b in group["dependencies"]["output_fmt"]["oneOf"]}
+    assert "cram_version" not in branches["bam"]["properties"]
+    assert branches["cram"]["properties"]["cram_version"]["default"] == "3.0"

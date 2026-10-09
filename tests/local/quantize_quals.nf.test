@@ -120,9 +120,7 @@ nextflow_process {
         then {
             assert process.success
             def lines = file(process.out.hist[0]).readLines()
-            assert lines[0] == "# id: 'quantize_quals_hist'"
-            assert lines[2] == "# plot_type: 'bargraph'"
-            assert lines.contains('Category\tbefore\tafter')
+            assert lines[0] == 'Category\tbefore\tafter'
             // Every input quality bin is preserved as its own row; quantized bins gain the collapsed mass.
             assert lines.contains('Q0\t0.5\t0.5')
             assert lines.contains('Q6\t2.5\t3.8')

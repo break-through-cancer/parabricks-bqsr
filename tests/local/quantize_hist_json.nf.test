@@ -1,0 +1,19 @@
+nextflow_function {
+    name "Test quantizeHistJson"
+    script "modules/local/quantize_quals.nf"
+    function "quantizeHistJson"
+
+    test("one MultiQC bargraph with Before and After tabs, one bar per sample") {
+        when { function { """
+            input[0] = [file("\${projectDir}/tests/fixtures/modules/S2.quantize_hist.tsv"), file("\${projectDir}/tests/fixtures/modules/S1.quantize_hist.tsv")]
+        """ } }
+        then {
+            def j = new groovy.json.JsonSlurper().parseText(function.result)
+            assert j.plot_type == 'bargraph' && j.id == 'quantize_quals_hist'
+            assert j.pconfig.data_labels*.name == ['Before', 'After']
+            assert j.data.size() == 2
+            assert j.data[0] == [S1: [Q10: 1.5, Q30: 98.5], S2: [Q10: 2, Q30: 98]]
+            assert j.data[1] == [S1: [Q10: 60, Q30: 40], S2: [Q10: 70, Q30: 30]]
+        }
+    }
+}

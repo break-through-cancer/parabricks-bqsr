@@ -31,6 +31,54 @@ nextflow_process {
         }
     }
 
+    test("output_fmt bam with quantization off indexes the recal BAM in-place") {
+        when {
+            params { output_fmt = 'bam'; quantize_quals_enabled = false }
+            process {
+                """
+                input[0] = [
+                    [ sample: 'TEST_SAMPLE' ],
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram"),
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram.crai"),
+                    file("\${projectDir}/tests/fixtures/modules/placeholder.recal.table")
+                ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.bai.size() == 1
+            assert file(process.out.bai[0][1]).name == 'TEST_SAMPLE.recal.bam.bai'
+        }
+    }
+
+    test("default params (cram output) do not index the recal BAM: nothing would use it") {
+        when {
+            process {
+                """
+                input[0] = [
+                    [ sample: 'TEST_SAMPLE' ],
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram"),
+                    file("\${projectDir}/tests/fixtures/modules/sample.cram.crai"),
+                    file("\${projectDir}/tests/fixtures/modules/placeholder.recal.table")
+                ]
+                input[1] = [
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta"),
+                    file("\${projectDir}/tests/fixtures/modules/reference.fasta.fai")
+                ]
+                """
+            }
+        }
+        then {
+            assert process.success
+            assert process.out.bai.size() == 0
+        }
+    }
+
     test("an input BAM already named <sample>.recal.bam does not collide with the output") {
         when {
             process {

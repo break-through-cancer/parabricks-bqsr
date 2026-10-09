@@ -1,0 +1,406 @@
+{
+  "form": {
+    "type": "object",
+    "properties": {
+      "genome_selection": {
+        "title": "Reference Genome",
+        "type": "object",
+        "properties": {
+          "genome_source": {
+            "title": "Reference Genome Source",
+            "type": "string",
+            "enum": [
+              "igenomes",
+              "dataset"
+            ],
+            "default": "igenomes",
+            "description": "iGenomes GATK.GRCh38 (known sites and calling intervals included), or a custom genome from a Cirro BWA index dataset."
+          }
+        },
+        "dependencies": {
+          "genome_source": {
+            "oneOf": [
+              {
+                "properties": {
+                  "genome_source": {
+                    "enum": [
+                      "igenomes"
+                    ]
+                  },
+                  "genome": {
+                    "title": "Genome",
+                    "type": "string",
+                    "enum": [
+                      "GATK.GRCh38"
+                    ],
+                    "default": "GATK.GRCh38"
+                  },
+                  "intervals_mode": {
+                    "title": "Intervals for the BQSR table",
+                    "type": "string",
+                    "enum": [
+                      "gatk_calling_regions",
+                      "none",
+                      "custom"
+                    ],
+                    "default": "gatk_calling_regions",
+                    "description": "Restricts BQSR table building only, never which reads are output. Default: GATK WGS calling regions; custom: your own BED (e.g. WES targets)."
+                  }
+                },
+                "dependencies": {
+                  "intervals_mode": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "intervals_mode": {
+                            "enum": [
+                              "gatk_calling_regions"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "intervals_mode": {
+                            "enum": [
+                              "none"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "intervals_mode": {
+                            "enum": [
+                              "custom"
+                            ]
+                          },
+                          "custom_intervals": {
+                            "title": "Intervals (BED)",
+                            "type": "string",
+                            "pathType": "references",
+                            "file": "**/genome_bed/**/regions.bed",
+                            "useS3Path": true,
+                            "description": "BED from the references library, e.g. a WES target BED or custom WGS intervals."
+                          }
+                        },
+                        "required": [
+                          "custom_intervals"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "genome_source": {
+                    "enum": [
+                      "dataset"
+                    ]
+                  },
+                  "genome_index": {
+                    "title": "BWA Genome Index",
+                    "type": "string",
+                    "pathType": "dataset",
+                    "process": [
+                      "process-cirro-genome-index-bwa-1-0",
+                      "genome_bwa_index"
+                    ],
+                    "description": "A pre-built BWA (not BWA-MEM2) genome index dataset containing genome.fasta and genome.fasta.fai."
+                  },
+                  "dbsnp": {
+                    "title": "Known Sites (VCF)",
+                    "type": "string",
+                    "pathType": "references",
+                    "file": "**/germline_resource/**/germline_resource.vcf.gz",
+                    "useS3Path": true,
+                    "description": "Optional. Without any known sites, BQSR is skipped and outputs are published as .md files."
+                  },
+                  "known_indels": {
+                    "title": "Known Indels (VCF)",
+                    "type": "string",
+                    "pathType": "references",
+                    "file": "**/germline_resource/**/germline_resource.vcf.gz",
+                    "useS3Path": true,
+                    "description": "Optional second known-sites VCF."
+                  },
+                  "custom_intervals": {
+                    "title": "Intervals (BED)",
+                    "type": "string",
+                    "pathType": "references",
+                    "file": "**/genome_bed/**/regions.bed",
+                    "useS3Path": true,
+                    "description": "Optional. Restricts BQSR table building only."
+                  }
+                },
+                "required": [
+                  "genome_index"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "output": {
+        "title": "Output",
+        "type": "object",
+        "properties": {
+          "output_fmt": {
+            "title": "Output Format",
+            "type": "string",
+            "enum": [
+              "bam",
+              "cram"
+            ],
+            "default": "bam"
+          }
+        },
+        "dependencies": {
+          "output_fmt": {
+            "oneOf": [
+              {
+                "properties": {
+                  "output_fmt": {
+                    "enum": [
+                      "bam"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "output_fmt": {
+                    "enum": [
+                      "cram"
+                    ]
+                  },
+                  "cram_version": {
+                    "title": "CRAM Version",
+                    "description": "3.0 is readable by essentially all tools; 3.1 is smaller but some tools (and coverage QC, which is skipped) cannot read it.",
+                    "type": "string",
+                    "enum": [
+                      "3.0",
+                      "3.1"
+                    ],
+                    "default": "3.0"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "publish_markduplicates": {
+        "title": "Also publish duplicate-marked alignment",
+        "type": "boolean",
+        "default": false,
+        "description": "Keep the pre-BQSR alignment (known sites only) so BQSR can be re-applied later without re-aligning. Adds a large extra file."
+      },
+      "bqsr": {
+        "title": "BQSR",
+        "type": "object",
+        "properties": {
+          "apply_bqsr": {
+            "title": "Apply BQSR",
+            "type": "boolean",
+            "default": true,
+            "description": "Off: align only, publishing the duplicate-marked alignment and BQSR table to apply later. No effect without known sites."
+          }
+        },
+        "dependencies": {
+          "apply_bqsr": {
+            "oneOf": [
+              {
+                "properties": {
+                  "apply_bqsr": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "quantization": {
+                    "title": "Quality-Score Quantization Options",
+                    "type": "object",
+                    "properties": {
+                      "quantize_quals_enabled": {
+                        "title": "Quantize Quality Scores",
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "static_quantized_quals": {
+                        "title": "Static Quantization Bins",
+                        "type": "string",
+                        "default": "10,20,30",
+                        "pattern": "^\\s*[0-9]+(\\s*,\\s*[0-9]+)*\\s*$"
+                      },
+                      "preserve_qscores_less_than": {
+                        "title": "Preserve Quality Scores Below",
+                        "type": "integer",
+                        "default": 6,
+                        "minimum": 0,
+                        "maximum": 93
+                      },
+                      "round_down_quantized": {
+                        "title": "Round Down",
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "description": "Collapses base qualities into a few bins to shrink the output; see the README lookup table for how scores map."
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "apply_bqsr": {
+                    "enum": [
+                      false
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "read_trimming": {
+        "title": "Read Trimming (fastp)",
+        "type": "object",
+        "properties": {
+          "trim": {
+            "title": "Adapter and clip trimming",
+            "type": "object",
+            "properties": {
+              "trim_fastq": {
+                "title": "Trim reads",
+                "type": "boolean",
+                "default": false,
+                "description": "fastp always runs for read counts and QC; this adds adapter trimming and base clipping."
+              }
+            },
+            "dependencies": {
+              "trim_fastq": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "trim_fastq": {
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "clip_r1": {
+                        "title": "Clip R1 (5')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "clip_r2": {
+                        "title": "Clip R2 (5')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "three_prime_clip_r1": {
+                        "title": "Clip R1 (3')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      },
+                      "three_prime_clip_r2": {
+                        "title": "Clip R2 (3')",
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "trim_fastq": {
+                        "enum": [
+                          false
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "poly_g_trimming": {
+            "title": "Poly-G tail trimming",
+            "type": "string",
+            "enum": [
+              "auto",
+              "on",
+              "off"
+            ],
+            "default": "auto",
+            "description": "Applies even when trimming is off. auto: trim on two-colour instruments (NovaSeq, NextSeq). off: align the original reads."
+          },
+          "length_required": {
+            "title": "Minimum read length",
+            "type": "integer",
+            "default": 15,
+            "minimum": 1
+          },
+          "save_trimmed": {
+            "title": "Save trimmed FASTQs",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "alignment_resources": {
+        "title": "Alignment Resource Options",
+        "type": "object",
+        "properties": {
+          "fq2bam_gpus": {
+            "title": "GPUs for alignment",
+            "type": "integer",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 4,
+            "description": "1-4. More GPUs align faster; use 1 to minimise cost."
+          },
+          "fq2bam_low_memory": {
+            "title": "fq2bam low-memory mode",
+            "type": "boolean",
+            "default": false,
+            "description": "One BWA stream per GPU. Turn on only if alignment runs out of GPU memory."
+          },
+          "fq2bam_memory_gb": {
+            "title": "fq2bam memory override (GB)",
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 768,
+            "description": "Leave empty for the default (44 GB per GPU, minimum 64 GB total). For deep samples (60x+) set e.g. 176 with 2 GPUs to avoid a memory kill; 352 recommended for 105x."
+          }
+        }
+      },
+      "advanced": {
+        "title": "Advanced Options",
+        "type": "object",
+        "properties": {
+          "markdups_se_mode": {
+            "title": "Single-end duplicate marking",
+            "type": "string",
+            "enum": [
+              "5prime",
+              "start-end"
+            ],
+            "default": "5prime",
+            "description": "5prime: standard (Picard/GATK). start-end: both fragment ends; for adapter-trimmed short-fragment data such as cfDNA."
+          },
+          "optical_duplicate_pixel_distance": {
+            "title": "Optical duplicate pixel distance",
+            "type": "integer",
+            "default": 100,
+            "description": "Affects optical-duplicate metrics only. 2500 is usual for patterned flowcells."
+          }
+        }
+      }
+    }
+  },
+  "ui": {}
+}

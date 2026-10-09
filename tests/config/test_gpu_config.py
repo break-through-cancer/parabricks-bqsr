@@ -24,13 +24,13 @@ def parabricks_processes():
 def test_every_parabricks_process_requests_a_gpu():
     procs = parabricks_processes()
     assert procs == ["PARABRICKS_APPLYBQSR", "PARABRICKS_FQ2BAM", "PARABRICKS_FQ2BAM_PART", "PARABRICKS_MARKDUP"]
-    for cfg in (flat_config(), flat_config("-c", ".cirro/fastq/process-compute.config")):
+    for cfg in (flat_config(), flat_config("-c", ".cirro/align/process-compute.config")):
         for p in procs:
             assert re.search(rf"withName:{p}'\.accelerator = ", cfg), f"{p} has no accelerator"
 
 
 def test_applybqsr_requests_at_most_two_gpus():
-    for cfg in (flat_config(), flat_config("-c", ".cirro/fastq/process-compute.config"),
-                flat_config("-c", ".cirro/alignment/process-compute.config")):
+    for cfg in (flat_config(), flat_config("-c", ".cirro/align/process-compute.config"),
+                flat_config("-c", ".cirro/apply_bqsr/process-compute.config")):
         m = re.search(r"withName:PARABRICKS_APPLYBQSR'\.accelerator = (\d+)", cfg)
         assert m and 1 <= int(m.group(1)) <= 2
